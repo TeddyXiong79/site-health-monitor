@@ -8,17 +8,17 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  REGISTRY: ghcr.io
-  # MUST be lowercase — Docker registry requirement
-  IMAGE_NAME: ${{ lower(github.repository_owner) }}/site-health-monitor
-
 jobs:
   build-push:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+
+    env:
+      REGISTRY: ghcr.io
+      # MUST be lowercase — Docker registry requirement
+      IMAGE_NAME: ${{ lower(github.repository_owner) }}/site-health-monitor
 
     steps:
       - name: Checkout code
