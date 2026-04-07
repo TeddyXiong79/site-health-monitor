@@ -1,0 +1,22 @@
+# Binaries
+site-health-monitor
+site-health-monitor.exe
+*.exe
+
+# Logs
+*.log
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+
+# Local config override (keep config.json as default)
+# config.json is committed so new users have a template

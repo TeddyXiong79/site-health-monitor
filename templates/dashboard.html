@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>全球代理节点监控</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-dark: #0a0a0f;
+            --bg-card: #12121a;
+            --cyan: #00f0ff;
+            --magenta: #ff00ff;
+            --blue-fast: #00a8ff;
+            --green-normal: #00ff88;
+            --yellow-high: #ffcc00;
+            --red-fault: #ff3366;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Rajdhani', sans-serif; 
+            background: var(--bg-dark); 
+            color: var(--text-primary); 
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+        
+        /* Matrix Rain Background */
+        #matrixCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            opacity: 0.2;
+        }
+        
+        /* Network Topology Background */
+        .bg-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            background: radial-gradient(ellipse at center, rgba(10,20,30,0.9) 0%, rgba(5,10,15,0.98) 100%);
+        }
+        
+        .container {
+            max-width: 461px;
+            margin: 0 auto;
+            padding: 12px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        /* Cyberpunk Header Window */
+        .header-window {
+            background: linear-gradient(145deg, rgba(20, 20, 35, 0.95), rgba(12, 12, 22, 0.98));
+            border: none;
+            border-radius: 14px;
+            padding: 2px 18px;
+            margin-bottom: 14px;
+            position: relative;
+            box-shadow: 0 0 25px rgba(0, 240, 255, 0.25), inset 0 0 35px rgba(0, 240, 255, 0.08);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .header-titles {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        
+        .header-window::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: linear-gradient(180deg, rgba(0, 240, 255, 0.15) 0%, transparent 100%);
+            border-radius: 7px 7px 0 0;
+            pointer-events: none;
+        }
+        
+        .header-window::after {
+            content: '';
+            display: none;
+        }
+        
+        .header-window .title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 2rem;
+            font-weight: 700;
+            text-align: center;
+            background: linear-gradient(180deg, #ffffff, #fffacd);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-top: 15px;
+            margin-bottom: 4px;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.4), 0 0 20px rgba(255, 250, 205, 0.2);
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.3));
+        }
+
+        .header-window .subtitle {
+            font-size: 0.65rem;
+            color: var(--cyan);
+            text-align: center;
+            letter-spacing: 3px;
+            margin-bottom: 6px;
+            opacity: 0.8;
+            display: block;
+            width: 100%;
+        }
+        
+        .header-window .version {
+            display: inline-block;
+            background: rgba(0, 240, 255, 0.1);
+            border: 1px solid rgba(0, 240, 255, 0.3);
+            padding: 3px 12px;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            color: var(--cyan);
+            margin-right: 8px;
+        }
+        
+        .header-window .credit {
+            font-size: 0.56rem;
+            color: #aaaaaa;
+            position: absolute;
+            bottom: 8px;
+            right: 12px;
+        }
+        
+        .header-window .footer {
+            text-align: center;
+            margin-top: 0px;
+            min-height: 20px;
+        }
+        
+        /* Header */
+        .header { text-align: center; padding: 4px 4px 3px; border-bottom: 1px solid rgba(0,240,255,0.2); margin-bottom: 3px; }
+        .header h1 { font-family: 'Orbitron', sans-serif; font-size: 1.2rem; font-weight: 700; background: linear-gradient(135deg, var(--cyan), var(--magenta)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 1px; }
+        .header .subtitle { font-size: 0.7rem; color: var(--cyan); letter-spacing: 2px; }
+        
+        /* Stats Grid */
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 3px; padding: 0; }
+        .stat-card { background: var(--bg-card); border-radius: 10px; padding: 1px 4px; text-align: center; border: 1px solid rgba(255,255,255,0.08); box-shadow: 0 2px 8px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; }
+        .stat-card .icon { font-size: 0.7rem; }
+        .stat-card .icon-label { display: flex; align-items: center; justify-content: center; gap: 2px; font-size: 0.7rem; color: #bbb; font-weight: 500; margin-bottom: 1px; }
+        .stat-card .value { font-family: 'Orbitron', sans-serif; font-size: 1.3rem; font-weight: 700; flex: 1; display: flex; align-items: center; margin-top: 10px; }
+        .stat-card .label { font-size: 0.7rem; color: #bbb; font-weight: 500; letter-spacing: 0.02em; white-space: nowrap; line-height: 1.2; }
+        .stat-card.fast { border-color: rgba(0,168,255,0.3); }
+        .stat-card.fast .value { color: var(--blue-fast); }
+        .stat-card.normal { border-color: rgba(0,255,136,0.3); }
+        .stat-card.normal .value { color: var(--green-normal); }
+        .stat-card.high-latency { border-color: rgba(255,204,0,0.3); }
+        .stat-card.high-latency .value { color: var(--yellow-high); }
+        .stat-card.fault { border-color: rgba(255,51,102,0.3); }
+        .stat-card.fault .value { color: var(--red-fault); }
+        
+        /* Summary */
+        .summary { background: linear-gradient(135deg, rgba(0,240,255,0.12), rgba(255,0,255,0.12)); border: 1px solid var(--cyan); border-radius: 12px; padding: 6px 12px 6px 14px; margin-bottom: 8px; display: flex; justify-content: flex-start; align-items: center; gap: 4px; flex-wrap: wrap; box-shadow: 0 0 15px rgba(0,240,255,0.1); transition: all 0.3s ease; }
+
+        #page-message {
+            border-radius: 8px;
+            padding: 2px 4px;
+            margin-top: 10px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+            animation: toastIn 0.25s ease;
+            transition: opacity 0.4s ease;
+            color: #ffffff;
+        }
+        #page-message.error {
+            background: rgba(255,51,102,0.15);
+            color: #ffffff;
+        }
+        #page-message.success {
+            background: rgba(0,255,136,0.12);
+            color: #ffffff;
+        }
+        .summary .label { font-size: 0.9rem; color: var(--green-normal); font-weight: 600; letter-spacing: 0.05em; }
+        .summary .fast-label { font-size: 0.85rem; color: var(--blue-fast); letter-spacing: 0.05em; margin-left: 2em; }
+        .summary .plus { font-size: 0.85rem; color: #ffffff; letter-spacing: 0.05em; }
+        .summary .normal-label { font-size: 0.85rem; color: var(--green-normal); letter-spacing: 0.05em; }
+        .summary .equals { font-size: 0.85rem; color: #ffffff; letter-spacing: 0.05em; }
+        .summary .count { font-family: 'Orbitron', sans-serif; font-size: 1rem; color: #88ffaa; font-weight: 700; letter-spacing: 0.05em; }
+        .summary .count-suffix { font-size: 0.9rem; color: #88ffaa; letter-spacing: 0.05em; }
+        .summary .pct { font-family: 'Orbitron', sans-serif; font-size: 1rem; color: #88ffaa; letter-spacing: 0.05em; }
+
+        .token-display { background: linear-gradient(135deg, rgba(0,240,255,0.08), rgba(255,0,255,0.08)); border: 1px solid rgba(0, 240, 255, 0.3); border-radius: 8px; padding: 5px 10px; margin-bottom: 8px; display: flex; justify-content: center; align-items: center; gap: 8px; font-size: 0.85rem; }
+        .token-display .token-label { color: var(--cyan); font-weight: 600; }
+        .token-display .token-value { font-family: 'Courier New', monospace; color: #88ffaa; letter-spacing: 0.15em; cursor: pointer; user-select: all; }
+        .token-display .token-value:hover { color: #aaffcc; }
+        .token-display .token-eye { background: none; border: none; cursor: pointer; color: var(--cyan); padding: 2px 6px; display: flex; align-items: center; transition: color 0.2s; }
+        .token-display .token-eye:hover { color: #88ffaa; }
+
+        /* Region List Container */
+        .region-container {
+            background: #1a1e2e;
+            border-radius: 10px;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+        .region-container-header {
+            background: linear-gradient(180deg, rgba(0, 240, 255, 0.1) 0%, transparent 100%);
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(0, 240, 255, 0.2);
+        }
+        .region-container-header .title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #ffffff;
+        }
+        .region-container-header .total-nodes {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #00e5ff;
+            text-shadow: 0 0 6px rgba(0, 229, 255, 0.6), 0 0 20px rgba(0, 229, 255, 0.25);
+            letter-spacing: 1px;
+            margin-left: 1em;
+        }
+        .region-container-header .total-nodes .wave-digit {
+            font-size: 1.2rem;
+            font-weight: 900;
+        }
+        .region-container-header .info {
+            margin-left: auto;
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .region-container-header .countdown {
+            color: var(--cyan);
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem;
+            transition: color 0.2s;
+        }
+        .region-container-header .countdown:hover {
+            color: #88ffaa;
+        }
+        
+        /* Region Card */
+        .region { margin-bottom: 0; }
+        .region-card {
+            background: linear-gradient(145deg, rgba(25, 30, 50, 0.98), rgba(15, 20, 35, 0.95));
+            border-radius: 12px;
+            border: none;
+            margin: 8px;
+            padding: 0px 2px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 240, 255, 0.1);
+            transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+            overflow: hidden;
+        }
+        .region-card:hover {
+            transform: translateY(-6px) scale(1.01);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5), 0 0 25px rgba(0, 240, 255, 0.25);
+        }
+        .region-header { 
+            background: linear-gradient(135deg, #1e2538 0%, #151a28 100%); 
+            padding: 12px; 
+            cursor: pointer; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            transition: background 0.3s ease;
+        }
+        .region-header:hover { background: linear-gradient(135deg, #252d45 0%, #1a2035 100%); }
+        .region-header .left { display: flex; align-items: center; gap: 10px; }
+        .region-header .flag { font-size: 1.4rem; }
+        .region-header .flag.tw { 
+            font-size: 0.8rem; 
+            font-weight: 700; 
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.7em;
+            height: 1.4em;
+            background: #000095;
+            border-radius: 2px;
+            border: 1px solid rgba(0, 0, 149, 0.6);
+            color: #FFF;
+            text-shadow: 0 0 4px rgba(255,255,255,0.9), 0 0 8px rgba(255,255,255,0.5);
+        }
+        .node-flag-img {
+            width: 1.2em;
+            height: 1.2em;
+            margin-right: 4px;
+            flex-shrink: 0;
+            vertical-align: middle;
+        }
+        .region-header .name-col { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+        .region-header .name { font-size: 0.9rem; font-weight: 600; color: #ffffff; }
+        .region-header .name-en { font-size: 0.65rem; color: #888888; }
+        .region-header .region-total { font-size: 0.85rem; color: var(--cyan); font-weight: 500; margin-left: 2em; }
+        .region-header .region-total.singapore { margin-left: 3em; }
+        .region-header .region-total.japan { margin-left: 4em; }
+        .region-header .total-pill { 
+            background: rgba(0, 168, 255, 0.2); 
+            color: var(--cyan); 
+            padding: 4px 10px; 
+            border-radius: 12px; 
+            font-size: 0.7rem; 
+            font-family: 'Orbitron', sans-serif;
+        }
+        .region-header .stats-row { 
+            display: flex; 
+            gap: 6px; 
+            align-items: center;
+            margin-left: auto;
+        }
+        
+        .region-card.expanded .region-header .stats-row { 
+            display: none;
+        }
+        .region-card.expanded .region-header { 
+            padding-bottom: 8px;
+        }
+        .region-header .stats { display: none; }
+        .region-card.expanded .region-header .stats { display: none; }
+        
+        .stat-pill { 
+            padding: 3px 8px; 
+            border-radius: 4px; 
+            font-size: 0.65rem; 
+            font-family: 'Orbitron', sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .stat-pill.fast { background: rgba(0, 168, 255, 0.2); color: var(--blue-fast); }
+        .stat-pill.normal { background: rgba(0, 255, 136, 0.2); color: var(--green-normal); }
+        .stat-pill.high-latency { background: rgba(255, 204, 0, 0.2); color: var(--yellow-high); }
+        .stat-pill.fault { background: rgba(255, 51, 102, 0.2); color: var(--red-fault); }
+        
+        .region-content { display: none; background: rgba(18,18,26,0.9); border-radius: 0 0 6px 6px; padding: 7px; }
+        .region-content.show { display: block; }
+        
+        .node-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            column-gap: 10px;
+            row-gap: 3px;
+        }
+        .node-grid > div:nth-child(odd) {
+            border-right: 1px solid rgba(255, 255, 255, 0.25);
+            padding-right: 10px;
+        }
+        .node-grid > div:nth-child(even) {
+            padding-left: 10px;
+        }
+        .node-item { background: var(--bg-card); border-radius: 4px; padding: 3px 5px; display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; }
+        .node-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .node-item .delay { font-family: 'Orbitron', sans-serif; font-weight: 600; margin-left: 4px; }
+        .node-item .delay.fast { color: var(--blue-fast); }
+        .node-item .delay.normal { color: var(--green-normal); }
+        .node-item .delay.high_latency { color: var(--yellow-high); }
+        .node-item .delay.fault { color: var(--red-fault); }
+        
+        /* Config */
+        .config { background: var(--bg-card); border-radius: 6px; padding: 7px; margin-top: 8px; }
+        .config h3 { font-size: 0.75rem; color: var(--cyan); margin-bottom: 5px; }
+        .config-info { display: flex; flex-direction: column; gap: 5px; }
+        .config-row { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+        .config-label { font-size: 0.7rem; color: var(--text-secondary); white-space: nowrap; min-width: 80px; }
+        .config-row input { background: var(--bg-dark); border: 1px solid rgba(0,240,255,0.3); border-radius: 4px; padding: 4px 8px; color: var(--text-primary); font-size: 0.75rem; }
+        .config-row input:focus { outline: none; border-color: var(--cyan); }
+        .config-actions { display: flex; gap: 6px; margin-top: 10px; }
+        .config-actions button { flex: 1; padding: 8px 12px; border: none; border-radius: 6px; font-size: 0.7rem; cursor: pointer; text-transform: uppercase; font-weight: 500; transition: all 0.3s ease; }
+        .btn-test { background: rgba(0,240,255,0.08); border: 1px solid rgba(0,240,255,0.3); color: var(--cyan); }
+        .btn-test:hover { background: rgba(0,240,255,0.15); }
+        .btn-save { background: rgba(0,240,255,0.08); border: 1px solid rgba(0,240,255,0.3); color: var(--cyan); }
+        .btn-save:hover { background: rgba(0,240,255,0.15); }
+        .test-result { margin-top: 10px; padding: 5px; border-radius: 4px; font-size: 0.75rem; text-align: center; display: none; transition: opacity 0.4s ease; }
+        .test-result.fade-out { opacity: 0; }
+        .test-result.success { background: rgba(0, 255, 136, 0.2); color: var(--green-normal); border: 1px solid var(--green-normal); }
+        .test-result.error { background: rgba(255, 51, 102, 0.2); color: var(--red-fault); border: 1px solid var(--red-fault); }
+        
+        /* Wave Bounce Animated Digits */
+        .wave-digit {
+            display: inline-block;
+            animation: waveFloat 2s ease-in-out infinite;
+            font-variant-numeric: tabular-nums;
+        }
+        @keyframes waveFloat {
+            0%, 100% { transform: translateY(0); }
+            25%      { transform: translateY(-1.5px); }
+            75%      { transform: translateY(1.5px); }
+        }
+        /* Refresh pulse: quick scale bump when value changes */
+        .wave-digit.pop {
+            animation: digitPop 0.4s ease-out;
+        }
+        @keyframes digitPop {
+            0%   { transform: scale(1); opacity: 0.6; }
+            50%  { transform: scale(1.35); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @media (max-width: 480px) {
+            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+            .config-row { flex-direction: column; align-items: flex-start; }
+            .config-row input { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="matrixCanvas"></canvas>
+    <div class="container">
+        <!-- Cyberpunk Header Window -->
+        <div class="header-window">
+            <div class="header-titles">
+                <div class="title">全球代理节点健康监控</div>
+                <div class="subtitle">Global Real-time Proxy Node HealthMonitor</div>
+            </div>
+            <div class="footer">
+                <span class="version">Version: {{.Data.Version}}</span>
+                <span class="credit">Design by Teddy</span>
+            </div>
+        </div>
+        
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card fast"><div class="value" id="stat-fast">{{.Data.Stats.Fast}}</div><div class="icon-label"><span class="icon">🚀</span>高速节点</div><div class="label"><span style="font-size:0.6rem">≤ 150ms</span></div></div>
+            <div class="stat-card normal"><div class="value" id="stat-normal">{{.Data.Stats.Normal}}</div><div class="icon-label"><span class="icon">✅</span>正常节点</div><div class="label"><span style="font-size:0.6rem">150ms~240ms</span></div></div>
+            <div class="stat-card high-latency"><div class="value" id="stat-high">{{.Data.Stats.HighLatency}}</div><div class="icon-label"><span class="icon">⚠️</span>低速节点</div><div class="label"><span style="font-size:0.6rem">240ms~500ms</span></div></div>
+            <div class="stat-card fault"><div class="value" id="stat-fault">{{.Data.Stats.Fault}}</div><div class="icon-label"><span class="icon">❌</span>故障节点</div><div class="label"><span style="font-size:0.6rem">> 500ms</span></div></div>
+        </div>
+        
+        <div class="summary" id="summary">
+            <span class="label">健康度统计：</span>
+            <span class="fast-label">高速节点</span><span class="plus">+</span><span class="normal-label">正常节点</span><span class="equals">=</span>
+            <span class="count" id="summary-count">{{add .Data.Stats.Fast .Data.Stats.Normal}}</span><span class="count-suffix">节点</span>
+            <span class="pct" id="summary-pct">({{percentage .Data.Stats.Total (add .Data.Stats.Fast .Data.Stats.Normal)}}%)</span>
+        </div>
+
+        <div class="region-container">
+            <div class="region-container-header">
+                <span class="title">全球各地区节点列表</span>
+                <span class="total-nodes" id="total-nodes">共 {{.Data.Stats.Total}} 节点</span>
+                <span class="info">
+                    <span id="update-time">{{.Data.UpdateTime}}</span>
+                    <span class="countdown" id="countdown" onclick="refreshData()" style="cursor:pointer;">{{.Data.Config.RefreshSeconds}}s</span>
+                </span>
+            </div>
+        
+        <div id="regions-container">
+        {{range .Data.Regions}}
+        <div class="region-card" id="region-{{.Name}}">
+            <div class="region-header" onclick="toggleRegion('{{.Name}}')">
+                <div class="left">
+                    <span class="flag {{if eq .Name "中国台湾"}}tw{{end}}">{{regionFlag .Name}}</span>
+                    <div class="name-col">
+                        <span class="name">{{.Name}}</span>
+                        <span class="name-en">{{regionEnglish .Name}}</span>
+                    </div>
+                    <span class="region-total {{if eq .Name "新加坡"}}singapore{{end}} {{if eq .Name "日本"}}japan{{end}}">{{.Stats.Total}} 节点</span>
+                </div>
+                <div class="stats-row">
+                    <span class="stat-pill fast">🚀 {{.Stats.Fast}}</span>
+                    <span class="stat-pill normal">✅ {{.Stats.Normal}}</span>
+                    <span class="stat-pill high-latency">⚠️ {{.Stats.HighLatency}}</span>
+                    <span class="stat-pill fault">❌ {{.Stats.Fault}}</span>
+                </div>
+            </div>
+            <div class="region-content" id="content-{{.Name}}">
+                <div class="node-grid">
+                    {{$rn := .Name}}
+                    {{range .Nodes}}
+                    <div class="node-item">{{if eq $rn "中国台湾"}}<img class="node-flag-img" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNiAzNiI+PHBhdGggZmlsbD0iI0ZFMDAwMCIgZD0iTTMyIDVIMTd2MTNIMHY5YzAgMi4yMDkgMS43OTEgNCA0IDRoMjhjMi4yMDkgMCA0LTEuNzkxIDQtNFY5YzAtMi4yMDktMS43OTEtNC00LTR6Ii8+PHBhdGggZmlsbD0iIzAwMDA5NSIgZD0iTTE3IDVINEMxLjc5MSA1IDAgNi43OTEgMCA5djloMTdWNXptLTYuMDYzIDQuNjFsMi4wMzUtLjU0OC0xLjQ5MSAxLjQ4N2MtLjEyMS0uMzQ4LS4zMDctLjY2NS0uNTQ0LS45Mzl6bS4yNTEgMS44OWMwIDEuMzQ2LTEuMDkxIDIuNDM4LTIuNDM4IDIuNDM4UzYuMzEyIDEyLjg0NiA2LjMxMiAxMS41IDcuNDA0IDkuMDYyIDguNzUgOS4wNjJzMi40MzggMS4wOTIgMi40MzggMi40Mzh6bTAtNC4yMjJsLS41NDggMi4wMzVjLS4yNzMtLjIzNy0uNTkxLS40MjMtLjkzOS0uNTQ0bDEuNDg3LTEuNDkxek04Ljc1IDYuNjI1bC41NDIgMi4wMzRjLS4xNzUtLjAzMy0uMzU3LS4wNTItLjU0Mi0uMDUycy0uMzY3LjAxOS0uNTQyLjA1MmwuNTQyLTIuMDM0em0tLjk1MSAyLjE0NGMtLjM0OC4xMjEtLjY2NS4zMDctLjkzOS41NDRsLS41NDgtMi4wMzUgMS40ODcgMS40OTF6bS0xLjIzNi44NDFjLS4yMzcuMjczLS40MjMuNTkxLS41NDQuOTM5TDQuNTI4IDkuMDYybDIuMDM1LjU0OHptLS42NTQgMS4zNDhjLS4wMzQuMTc2LS4wNTIuMzU3LS4wNTIuNTQyIDAgLjE4NSAwMS44LjM2Ny4wNTIuNTQyTDMuODc1IDExLjVsMi4wMzQtLjU0OHptLjExIDEuNDkyYy4xMjEuMzQ4LjMwOC42NjYuNTQ0LjkzOWwtMi4wMzUuNTQ4IDEuNDkxLTEuNDg3em0yLjI5MyAzLjI3MmwuNTQ4LTIuMDM1Yy4yNzMuMjM2LjU5MS40MjMuOTM5LjU0NGwtMS40ODcgMS40OTF6bTIuNDM4LjY1M2wtLjU0Mi0yLjAzNGMuMTc2LjAzNC4zNTcuMDUyLjU0Mi4wNTJzLjM2Ny0uMDE4LjU0Mi0uMDUybC0uNTQyIDIuMDM0em0uOTUxLTIuMTQ0Yy4zNDgtLjEyMS42NjYtLjMwOC45MzktLjU0NGwuNTQ4IDIuMDM1LTEuNDg3LTEuNDkxeiIvPjwvc3ZnPgo=" alt="TW">{{end}}<span class="name">{{.Name}}</span><span class="delay {{.Category}}">{{.Delay}}ms</span></div>
+                    {{end}}
+                </div>
+            </div>
+        </div>
+        {{end}}
+        </div>
+        </div>
+
+        <div class="token-display" id="token-display">
+            <span class="token-label">对外API调用密钥：</span>
+            <span class="token-value" id="token-value" data-token="{{.Data.Config.APISecret}}" onclick="copyToken()">{{maskToken .Data.Config.APISecret}}</span>
+            <button class="token-eye" id="token-eye" onmousedown="showToken()" onmouseup="hideToken()" onmouseleave="hideToken()">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            </button>
+        </div>
+
+        <div class="config">
+            <h3>⚙️ 数据源的配置信息</h3>
+            <div class="config-info">
+                <div class="config-row">
+                    <span class="config-label" style="margin-left:20px;">数据源地址</span>
+                    <input type="text" id="apiAddress" value="{{escapeAttr .Data.Config.APIAddress}}" placeholder="例如: 10.0.0.1" autocomplete="off" style="width:120px;">
+                    <span class="config-label" style="margin-left:40px;">数据源端口</span>
+                    <input type="text" id="apiSourcePort" value="{{.Data.Config.APISourcePort}}" placeholder="9090" style="width:70px;">
+                </div>
+                <div class="config-row">
+                    <span class="config-label" style="margin-left:20px;">数据源密钥</span>
+                    <input type="password" id="apiSecret" value="" placeholder="（留空则不修改）" style="width:120px;">
+                    <span class="config-label" style="margin-left:40px;">刷新时间（秒）</span>
+                    <input type="number" id="refreshSeconds" value="{{.Data.Config.RefreshSeconds}}" placeholder="20" style="width:70px;">
+                </div>
+            </div>
+            <div class="config-actions">
+                <button class="btn-test" onclick="testConn()">连接测试</button>
+                <button class="btn-save" onclick="saveConfig()">配置保存</button>
+            </div>
+            <!-- 统一错误/提示显示区，刷新和连接测试共用 -->
+            <div id="page-message" style="display:none;"></div>
+        </div>
+    </div>
+
+    <script>
+        // XSS protection: escape HTML special characters
+        function escapeHtml(str) {
+            if (!str) return '';
+            return str.replace(/[&<>"']/g, function(c) {
+                switch (c) {
+                    case '&': return '&amp;';
+                    case '<': return '&lt;';
+                    case '>': return '&gt;';
+                    case '"': return '&quot;';
+                    case "'": return '&#39;';
+                    default: return c;
+                }
+            });
+        }
+
+        // Wave animated digits helper
+        // Converts a number/string into individual <span> chars with staggered wave animation.
+        function waveDigits(value, suffix) {
+            suffix = suffix || '';
+            var str = String(value) + suffix;
+            var html = '';
+            var digitIndex = 0;
+            for (var i = 0; i < str.length; i++) {
+                var ch = str[i];
+                if (/\d/.test(ch)) {
+                    var delay = (digitIndex * 0.12).toFixed(2);
+                    html += '<span class="wave-digit" style="animation-delay:' + delay + 's">' + ch + '</span>';
+                    digitIndex++;
+                } else {
+                    html += ch;
+                }
+            }
+            return html;
+        }
+
+        var _originalToken = '';
+        function showToken() {
+            var el = document.getElementById('token-value');
+            if (el) {
+                _originalToken = el.getAttribute('data-token');
+                el.textContent = _originalToken;
+            }
+        }
+        function hideToken() {
+            var el = document.getElementById('token-value');
+            if (el && _originalToken.length > 4) {
+                el.textContent = _originalToken.substring(0, 2) + '***' + _originalToken.substring(_originalToken.length - 2);
+            }
+        }
+        function copyToken() {
+            var el = document.getElementById('token-value');
+            if (el) {
+                var token = el.getAttribute('data-token');
+                navigator.clipboard.writeText(token).then(function() {
+                    el.textContent = '已复制!';
+                    setTimeout(function() {
+                        hideToken();
+                    }, 2000);
+                });
+            }
+        }
+
+        // Render wave digits into an element; adds a brief pop effect on value change.
+        var _prevWaveValues = {};
+        function setWaveDigits(el, value, suffix) {
+            if (!el) return;
+            suffix = suffix || '';
+            var key = el.id || el.className;
+            var full = String(value) + suffix;
+            if (_prevWaveValues[key] === full) return; // no change, skip
+            _prevWaveValues[key] = full;
+            el.innerHTML = waveDigits(value, suffix);
+            // Brief pop on each digit
+            var spans = el.querySelectorAll('.wave-digit');
+            spans.forEach(function(s) {
+                s.classList.add('pop');
+                s.addEventListener('animationend', function handler() {
+                    s.classList.remove('pop');
+                    s.removeEventListener('animationend', handler);
+                }, { once: true });
+            });
+        }
+
+        // Matrix Rain Effect
+        const canvas = document.getElementById('matrixCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*()_+-=[]{}|;:,.<>?';
+        const charArray = chars.split('');
+        const fontSize = 14;
+        const columns = canvas.width / fontSize;
+        const drops = [];
+        
+        for(let i = 0; i < columns; i++) {
+            drops[i] = Math.random() * -100;
+        }
+        
+        function drawMatrix() {
+            ctx.fillStyle = 'rgba(10, 10, 15, 0.05)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#00ff88';
+            ctx.font = fontSize + 'px monospace';
+            
+            for(let i = 0; i < drops.length; i++) {
+                const char = charArray[Math.floor(Math.random() * charArray.length)];
+                const x = i * fontSize;
+                const y = drops[i] * fontSize;
+                
+                const hue = (i / columns) * 60 + 100;
+                const color = 'hsl(' + hue + ', 100%, 50%)';
+                ctx.fillStyle = color;
+                ctx.fillText(char, x, y);
+                
+                if(y > canvas.height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+        }
+        
+        setInterval(drawMatrix, 50);
+        
+        window.addEventListener('resize', function() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        });
+        
+        // --- AJAX auto-refresh: preserves expanded region state ---
+        var refreshInterval = {{.Data.Config.RefreshSeconds}};
+        var seconds = refreshInterval;
+        var isRefreshing = false;
+
+        function showRefreshingIndicator(show) {
+            var countdownEl = document.getElementById('countdown');
+            if (countdownEl) {
+                if (show) {
+                    countdownEl.textContent = '刷新ing';
+                    countdownEl.style.color = '#ffcc00';
+                } else {
+                    countdownEl.textContent = seconds + 's';
+                    countdownEl.style.color = '';
+                }
+            }
+        }
+
+        function refreshData() {
+            if (isRefreshing) return;
+            isRefreshing = true;
+            showRefreshingIndicator(true);
+
+            // Trigger OpenClash delay check
+            var refreshController = new AbortController();
+            var refreshTimeoutId = setTimeout(function() { refreshController.abort(); }, 30000);
+            fetch('/api/refresh', {
+                method: 'POST',
+                signal: refreshController.signal
+            })
+            .then(function(r) { clearTimeout(refreshTimeoutId); return r.json(); })
+            .then(function(d) {
+                if (!d.success) {
+                    var countdownEl = document.getElementById('countdown');
+                    if (countdownEl) {
+                        countdownEl.textContent = '刷新失败';
+                        countdownEl.style.color = '#ff3366';
+                    }
+                    isRefreshing = false;
+                    showRefreshingIndicator(false);
+                    // Show error in unified page-message area
+                    var r = document.getElementById('page-message');
+                    if (r) {
+                        r.textContent = '刷新失败 ✗ ' + (d.message || '');
+                        r.className = 'error';
+                        r.style.display = 'block';
+                        autoHidePageMsg(r);
+                    }
+                    return;
+                }
+                // Refresh triggered, now fetch the latest data (OpenClash has updated)
+                fetchDataAndUpdate();
+                // Show success message in unified page-message area
+                var r = document.getElementById('page-message');
+                if (r) {
+                    r.textContent = '延迟检测已触发 ✓';
+                    r.className = 'success';
+                    r.style.display = 'block';
+                    autoHidePageMsg(r);
+                }
+            })
+            .catch(function(err) {
+                var countdownEl = document.getElementById('countdown');
+                if (countdownEl) {
+                    countdownEl.textContent = '刷新失败';
+                    countdownEl.style.color = '#ff3366';
+                }
+                isRefreshing = false;
+                showRefreshingIndicator(false);
+                // Show error in unified page-message area
+                var r = document.getElementById('page-message');
+                if (r) {
+                    r.textContent = '刷新失败 ✗ 连接错误';
+                    r.className = 'error';
+                    r.style.display = 'block';
+                    autoHidePageMsg(r);
+                }
+            });
+        }
+
+function fetchDataAndUpdate() {
+            var controller = new AbortController();
+            var timeoutId = setTimeout(function() { controller.abort(); }, 8000);
+
+            fetch('/api/data', { signal: controller.signal })
+                .then(function(r) { clearTimeout(timeoutId); return r.json(); })
+                .then(function(d) {
+                    // Update stats with wave animation
+                    setWaveDigits(document.getElementById('stat-fast'), d.stats.fast);
+                    setWaveDigits(document.getElementById('stat-normal'), d.stats.normal);
+                    setWaveDigits(document.getElementById('stat-high'), d.stats.high_latency);
+                    setWaveDigits(document.getElementById('stat-fault'), d.stats.fault);
+                    // Update summary with wave animation
+                    var healthy = d.stats.fast + d.stats.normal;
+                    var pct = d.stats.total > 0 ? Math.floor(healthy * 100 / d.stats.total) : 0;
+                    setWaveDigits(document.getElementById('summary-count'), healthy, '');
+                    setWaveDigits(document.getElementById('summary-pct'), '(' + pct + '%)');
+                    setWaveDigits(document.getElementById('total-nodes'), '共' + d.stats.total + '节点');
+                    document.getElementById('update-time').textContent = d.update_time;
+                    // Remember expanded regions
+                    var expanded = {};
+                    document.querySelectorAll('.region-card.expanded').forEach(function(el) {
+                        expanded[el.id] = true;
+                    });
+                    // Rebuild regions
+                    var regionFlags = {"中国香港":"🇭🇰","新加坡":"🇸🇬","中国台湾":"TW","日本":"🇯🇵","美国":"🇺🇸","其他地区":"🌏"};
+                    var regionEnglish = {"中国香港":"Hong Kong","新加坡":"Singapore","中国台湾":"Taiwan","日本":"Japan","美国":"United States","其他地区":"Other"};
+                    var html = '';
+                    d.regions.forEach(function(region) {
+                        var rid = 'region-' + region.name;
+                        var isExpanded = expanded[rid];
+                        var flagClass = region.name === '中国台湾' ? ' tw' : '';
+                        var flag = regionFlags[region.name] || '🌏';
+                        var nameEn = regionEnglish[region.name] || 'Other';
+                        var totalExtra = '';
+                        if (region.name === '新加坡') totalExtra = ' singapore';
+                        else if (region.name === '日本') totalExtra = ' japan';
+                        html += '<div class="region-card' + (isExpanded ? ' expanded' : '') + '" id="' + rid + '">';
+                        html += '<div class="region-header" onclick="toggleRegion(\'' + region.name + '\')">';
+                        html += '<div class="left">';
+                        html += '<span class="flag' + flagClass + '">' + flag + '</span>';
+                        html += '<div class="name-col"><span class="name">' + escapeHtml(region.name) + '</span><span class="name-en">' + nameEn + '</span></div>';
+                        html += '<span class="region-total' + totalExtra + '">' + waveDigits(region.stats.total, ' 节点') + '</span>';
+                        html += '</div>';
+                        html += '<div class="stats-row">';
+                        html += '<span class="stat-pill fast">🚀 ' + waveDigits(region.stats.fast) + '</span>';
+                        html += '<span class="stat-pill normal">✅ ' + waveDigits(region.stats.normal) + '</span>';
+                        html += '<span class="stat-pill high-latency">⚠️ ' + waveDigits(region.stats.high_latency) + '</span>';
+                        html += '<span class="stat-pill fault">❌ ' + waveDigits(region.stats.fault) + '</span>';
+                        html += '</div></div>';
+                        html += '<div class="region-content' + (isExpanded ? ' show' : '') + '" id="content-' + region.name + '">';
+                        html += '<div class="node-grid">';
+                        region.nodes.forEach(function(node) {
+                            var twFlagImg = region.name === '中国台湾' ? '<img class="node-flag-img" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNiAzNiI+PHBhdGggZmlsbD0iI0ZFMDAwMCIgZD0iTTMyIDVIMTd2MTNIMHY5YzAgMi4yMDkgMS43OTEgNCA0IDRoMjhjMi4yMDkgMCA0LTEuNzkxIDQtNFY5YzAtMi4yMDktMS43OTEtNC00LTR6Ii8+PHBhdGggZmlsbD0iIzAwMDA5NSIgZD0iTTE3IDVINEMxLjc5MSA1IDAgNi43OTEgMCA5djloMTdWNXptLTYuMDYzIDQuNjFsMi4wMzUtLjU0OC0xLjQ5MSAxLjQ4N2MtLjEyMS0uMzQ4LS4zMDctLjY2NS0uNTQ0LS45Mzl6bS4yNTEgMS44OWMwIDEuMzQ2LTEuMDkxIDIuNDM4LTIuNDM4IDIuNDM4UzYuMzEyIDEyLjg0NiA2LjMxMiAxMS41IDcuNDA0IDkuMDYyIDguNzUgOS4wNjJzMi40MzggMS4wOTIgMi40MzggMi40Mzh6bTAtNC4yMjJsLS41NDggMi4wMzVjLS4yNzMtLjIzNy0uNTkxLS40MjMtLjkzOS0uNTQ0bDEuNDg3LTEuNDkxek04Ljc1IDYuNjI1bC41NDIgMi4wMzRjLS4xNzUtLjAzMy0uMzU3LS4wNTItLjU0Mi0uMDUycy0uMzY3LjAxOS0uNTQyLjA1MmwuNTQyLTIuMDM0em0tLjk1MSAyLjE0NGMtLjM0OC4xMjEtLjY2NS4zMDctLjkzOS41NDRsLS41NDgtMi4wMzUgMS40ODcgMS40OTF6bS0xLjIzNi44NDFjLS4yMzcuMjczLS40MjMuNTkxLS41NDQuOTM5TDQuNTI4IDkuMDYybDIuMDM1LjU0OHptLS42NTQgMS4zNDhjLS4wMzQuMTc2LS4wNTIuMzU3LS4wNTIuNTQyIDAgLjE4NSAwMS44LjM2Ny4wNTIuNTQyTDMuODc1IDExLjVsMi4wMzQtLjU0OHptLjExIDEuNDkyYy4xMjEuMzQ4LjMwOC42NjYuNTQ0LjkzOWwtMi4wMzUuNTQ4IDEuNDkxLTEuNDg3em0yLjI5MyAzLjI3MmwuNTQ4LTIuMDM1Yy4yNzMuMjM2LjU5MS40MjMuOTM5LjU0NGwtMS40ODcgMS40OTF6bTIuNDM4LjY1M2wtLjU0Mi0yLjAzNGMuMTc2LjAzNC4zNTcuMDUyLjU0Mi4wNTJzLjM2Ny0uMDE4LjU0Mi0uMDUybC0uNTQyIDIuMDM0em0uOTUxLTIuMTQ0Yy4zNDgtLjEyMS42NjYtLjMwOC45MzktLjU0NGwuNTQ4IDIuMDM1LTEuNDg3LTEuNDkxeiIvPjwvc3ZnPgo=" alt="TW">' : '';
+                            html += '<div class="node-item">' + twFlagImg + '<span class="name">' + escapeHtml(node.name) + '</span><span class="delay ' + node.category + '">' + node.delay + 'ms</span></div>';
+                        });
+                        html += '</div></div></div>';
+                    });
+                    document.getElementById('regions-container').innerHTML = html;
+                    // Reset countdown and state
+                    seconds = refreshInterval;
+                    isRefreshing = false;
+                    showRefreshingIndicator(false);
+                })
+                .catch(function(err) {
+                    console.error('Data fetch failed:', err);
+                    isRefreshing = false;
+                    showRefreshingIndicator(false);
+                    var countdownEl = document.getElementById('countdown');
+                    if (countdownEl) {
+                        countdownEl.textContent = '连接失败';
+                        countdownEl.style.color = '#ff3366';
+                    }
+                });
+        }
+
+        setInterval(function() {
+            seconds--;
+            if (seconds <= 0) {
+                refreshData();
+            }
+            document.getElementById('countdown').textContent = Math.max(seconds, 0) + 's';
+        }, 1000);
+        
+        function toggleRegion(name) {
+            var card = document.getElementById('region-' + name);
+            var content = document.getElementById('content-' + name);
+            card.classList.toggle('expanded');
+            content.classList.toggle('show');
+        }
+
+        // Auto-hide the page-message feedback after 3 seconds.
+        var _hideTimer = null;
+        function autoHidePageMsg(el) {
+            if (_hideTimer) clearTimeout(_hideTimer);
+            _hideTimer = setTimeout(function() {
+                el.style.opacity = '0';
+                el.style.transition = 'opacity 0.4s ease';
+                setTimeout(function() {
+                    el.style.display = 'none';
+                    el.style.opacity = '';
+                }, 400);
+            }, 3000);
+        }
+
+        function saveConfig() {
+            var r = document.getElementById('page-message');
+            var payload = {
+                api_address: document.getElementById('apiAddress').value,
+                api_source_port: document.getElementById('apiSourcePort').value,
+                api_secret: document.getElementById('apiSecret').value,
+                refresh_seconds: +document.getElementById('refreshSeconds').value
+            };
+            fetch('/api/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(function(x) { return x.json(); }).then(function(d) {
+                if (d.success) {
+                    // 如果输入了新密钥，同步更新对外API调用密钥显示
+                    if (payload.api_secret) {
+                        var tokenEl = document.getElementById('token-value');
+                        tokenEl.setAttribute('data-token', payload.api_secret);
+                        tokenEl.textContent = payload.api_secret.substring(0, 2) + '***' + payload.api_secret.substring(payload.api_secret.length - 2);
+                    }
+                    refreshInterval = payload.refresh_seconds || refreshInterval;
+                    seconds = refreshInterval;
+                    r.textContent = '保存成功 ✓';
+                    r.className = 'success';
+                    r.style.display = 'block';
+                    autoHidePageMsg(r);
+                    // 延迟刷新，避免覆盖成功提示
+                    setTimeout(function() { refreshData(); }, 500);
+                } else {
+                    r.textContent = '保存失败 ✗ ' + (d.message || '未知错误');
+                    r.className = 'error';
+                    r.style.display = 'block';
+                    autoHidePageMsg(r);
+                }
+            }).catch(function(e) {
+                r.textContent = '保存失败 ✗ ' + e.message;
+                r.className = 'error';
+                r.style.display = 'block';
+                autoHidePageMsg(r);
+            });
+        }
+
+        function testConn() {
+            var r = document.getElementById('page-message');
+            r.textContent = '连接测试中...';
+            r.className = '';
+            r.style.display = 'block';
+            // 如果密码框为空，使用页面上已有的token
+            var secretInput = document.getElementById('apiSecret').value;
+            if (!secretInput) {
+                var tokenEl = document.getElementById('token-value');
+                secretInput = tokenEl.getAttribute('data-token') || '';
+            }
+            fetch('/api/test', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    api_address: document.getElementById('apiAddress').value,
+                    api_source_port: document.getElementById('apiSourcePort').value,
+                    api_secret: secretInput
+                })
+            }).then(function(x) { return x.json(); }).then(function(d) {
+                r.textContent = d.success ? '测试成功 ✓' : '测试失败 ✗ ' + (d.message || '');
+                r.className = d.success ? 'success' : 'error';
+                autoHidePageMsg(r);
+            }).catch(function(e) {
+                r.textContent = '测试失败: ' + e.message;
+                r.className = 'error';
+                autoHidePageMsg(r);
+            });
+        }
+
+        window.onload = function() {
+            // Initialize wave animation on all stat values rendered by Go template
+            var statIds = ['stat-fast', 'stat-normal', 'stat-high', 'stat-fault'];
+            statIds.forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    var val = el.textContent.trim();
+                    el.innerHTML = waveDigits(val);
+                }
+            });
+            // Summary count & pct
+            ['summary-count', 'summary-pct', 'total-nodes'].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    var val = el.textContent.trim();
+                    el.innerHTML = waveDigits(val);
+                }
+            });
+            // Region totals and stat pills
+            document.querySelectorAll('.region-total').forEach(function(el) {
+                el.innerHTML = waveDigits(el.textContent.trim());
+            });
+            document.querySelectorAll('.stat-pill').forEach(function(el) {
+                // Keep the emoji prefix, animate only the number
+                var text = el.textContent.trim();
+                var parts = text.match(/^(.+?)\s*(\d+)$/);
+                if (parts) {
+                    el.innerHTML = parts[1] + ' ' + waveDigits(parts[2]);
+                }
+            });
+            // Trigger initial refresh to get latest data
+            refreshData();
+        };
+    </script>
+</body>
+</html>

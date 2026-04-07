@@ -1,0 +1,17 @@
+# Git
+.git
+.gitignore
+
+# Build artifacts
+site-health-monitor
+site-health-monitor.exe
+*.log
+
+# Dev files
+.DS_Store
+*.md
+docs/
+.claude/
+
+# GitHub Actions
+.github/
