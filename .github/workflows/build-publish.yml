@@ -60,10 +60,4 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: true
           sbom: true
-
-      - name: Report build result
-        run: |
-          echo "=== Build Summary ==="
-          echo "Registry: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
-          echo "Platforms: linux/amd64, linux/arm64"
-          echo "Push: ${{ github.event_name != 'pull_request' }}"
+          verbosity: "diagnostic"
