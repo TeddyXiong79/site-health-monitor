@@ -1,38 +1,34 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.4
+# enable BuildKit multi-platform features
 
 # ===== Stage 1: Build =====
 FROM --platform=$BUILDPLATFORM golang:1.23-alpine AS builder
 
 WORKDIR /src
 
-# Cache go modules
+# Copy go.mod and download deps first (layer caching)
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source
+# Copy source and build
 COPY . .
 
-# Cross-compile: TARGETOS/TARGETARCH passed by buildx, defaults to linux/amd64
-ARG TARGETOS=linux
-ARG TARGETARCH=amd64
+ARG TARGETOS
+ARG TARGETARCH
 
 RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s" \
     -trimpath \
     -o site-health-monitor .
 
-# ===== Stage 2: Distroless runtime =====
+# ===== Stage 2: Final runtime =====
 FROM --platform=$TARGETPLATFORM gcr.io/distroless/static:nonroot
 
-# Copy static binary (position at root so base image CMD can find it)
-COPY --from=builder /src/site-health-monitor /site-health-monitor
+# Binary at root so base image ENTRYPOINT finds it
+COPY --from=builder /src/site-health-monitor /
 
-# Copy default config.json (bind-mount a new one at runtime to override)
+# Default config — bind-mount a custom config.json at runtime to override
 COPY config.json /config.json
-
-USER root
-RUN chmod 0444 /config.json
-USER nonroot
 
 EXPOSE 9099
 
