@@ -9,6 +9,7 @@
 - **实时统计** — 健康度百分比、高速/正常/低延迟/故障节点数量一目了然
 - **Dashboard 可视化** — 赛博朋克风格界面，数字动画、Matrix 背景特效
 - **刷新控制** — 自动定时刷新 + 手动触发 OpenClash 延迟检测
+- **代理切换** — 点击任意节点名即可切换 🔰国外流量 代理组，切换反馈显示在对应区域
 - **对外 API** — 支持 Bearer Token 认证的 RESTful API，方便接入其他系统
 - **容器化部署** — Docker 多平台镜像（amd64/arm64），scratch 极简基础镜像
 
@@ -84,7 +85,7 @@ site-health-monitor.exe
 | 数据源地址 | OpenClash 所在的 IP 或域名 | `192.168.66.251` |
 | 数据源端口 | OpenClash API 端口，默认 `9090` | `9090` |
 | API 密钥 | OpenClash 控制面板密钥 | `VMware1!` |
-| 刷新时间（秒） | Dashboard 自动刷新间隔 | `30` |
+| 刷新时间（秒） | Dashboard 自动刷新间隔 | `90` |
 
 配置文件 `config.json` 内容如下：
 
@@ -94,7 +95,7 @@ site-health-monitor.exe
   "api_secret": "",
   "api_source_port": "9090",
   "port": "9099",
-  "refresh_seconds": 30
+  "refresh_seconds": 90
 }
 ```
 
@@ -109,7 +110,7 @@ site-health-monitor.exe
 | POST | `/api/config` | 保存配置 |
 | POST | `/api/test` | 测试 OpenClash 连接 |
 | POST | `/api/refresh` | 触发 OpenClash 延迟检测 |
-| GET | `/api/health` | 健康检查 |
+| POST | `/api/switch` | 切换 🔰国外流量 代理节点 |
 
 ### 外部接口（需携带 Bearer Token）
 
@@ -176,7 +177,7 @@ docker buildx build --platform=linux/amd64,linux/arm64 -t ghcr.io/teddyxiong79/s
 
 ## 版本历史
 
-- **v1.5.2** — 新增点击节点名切换代理功能、204状态码兼容、切换反馈优化
+- **v1.5.2** — 新增点击节点名切换代理功能（切换反馈显示在区域header右侧）、204状态码兼容、escapeJsStr专用转义、fetchDataAndUpdate竞态条件修复、刷新间隔默认90秒
 - **v1.5.1** — 修复并发安全、Bug 优化、Docker 构建完善
 - **v1.5.0** — 初始版本
 
