@@ -19,6 +19,10 @@ var delayCheckClient = &http.Client{
 	Timeout: 30 * time.Second,
 }
 
+var switchProxyClient = &http.Client{
+	Timeout: 3 * time.Second,
+}
+
 // fetchProxies 执行 HTTP GET 并解析 OpenClash proxies 响应，供 FetchNodes 和 TestConnection 共用
 func fetchProxies(cfg Config) (*OpenClashResponse, error) {
 	if cfg.APIAddress == "" {
@@ -218,6 +222,49 @@ func TriggerDelayCheck(cfg Config) error {
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// SwitchProxy 设置 🔰国外流量 策略组的当前选中代理
+func SwitchProxy(cfg Config, nodeName string) error {
+	if cfg.APIAddress == "" {
+		return fmt.Errorf("API地址未配置")
+	}
+	groupName := "🔰国外流量"
+
+	encodedGroup := url.PathEscape(groupName)
+	urlStr := fmt.Sprintf("http://%s:%s/proxies/%s", cfg.APIAddress, cfg.APISourcePort, encodedGroup)
+
+	body, _ := json.Marshal(map[string]string{"name": nodeName})
+	req, err := http.NewRequest("PUT", urlStr, strings.NewReader(string(body)))
+	if err != nil {
+		return fmt.Errorf("创建请求失败: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if cfg.APISecret != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.APISecret)
+	}
+
+	resp, err := switchProxyClient.Do(req)
+	if err != nil {
+		return errors.New(classifyConnectError(err))
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 401 || resp.StatusCode == 403 {
+		return fmt.Errorf("密钥错误，请检查API密钥是否正确")
+	}
+	if resp.StatusCode == 404 {
+		return fmt.Errorf("分组或节点不存在，请检查名称是否正确")
+	}
+	if resp.StatusCode >= 500 {
+		return fmt.Errorf("OpenClash服务器错误 (%d)", resp.StatusCode)
+	}
+	if resp.StatusCode != 200 && resp.StatusCode != 204 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil

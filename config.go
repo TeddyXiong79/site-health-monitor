@@ -31,7 +31,7 @@ func LoadConfig() error {
     // 设置默认值
     viper.SetDefault("port", "9099")
     viper.SetDefault("api_source_port", "9090")
-    viper.SetDefault("refresh_seconds", 30)
+    viper.SetDefault("refresh_seconds", 90)
     if err := viper.ReadInConfig(); err != nil {
         if _, ok := err.(viper.ConfigFileNotFoundError); ok {
             // 配置文件不存在，使用默认配置

@@ -176,6 +176,7 @@ docker buildx build --platform=linux/amd64,linux/arm64 -t ghcr.io/teddyxiong79/s
 
 ## 版本历史
 
+- **v1.5.2** — 新增点击节点名切换代理功能、204状态码兼容、切换反馈优化
 - **v1.5.1** — 修复并发安全、Bug 优化、Docker 构建完善
 - **v1.5.0** — 初始版本
 

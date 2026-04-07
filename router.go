@@ -35,6 +35,7 @@ func SetupRouter() (*mux.Router, *ipLimiter) {
 
 	// 刷新节点延迟（先触发 OpenClash 延迟测试，再返回数据，无限流避免触发失败）
 	r.HandleFunc("/api/refresh", APIRefresh).Methods("POST")
+	r.HandleFunc("/api/switch", APISwitchProxy).Methods("POST")
 
 	return r, externalLimiter
 }

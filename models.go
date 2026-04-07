@@ -9,10 +9,11 @@ type Config struct {
 }
 
 type Node struct {
-    Name      string `json:"name"`
-    Delay     int    `json:"delay"`
-    Category  string `json:"category"`  // fast, normal, high_latency, fault
-    Region    string `json:"region"`
+    Name         string `json:"name"`
+    OriginalName string `json:"original_name"`
+    Delay        int    `json:"delay"`
+    Category     string `json:"category"`  // fast, normal, high_latency, fault
+    Region       string `json:"region"`
 }
 
 type RegionStats struct {

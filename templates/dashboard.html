@@ -335,14 +335,24 @@
         .region-header .stats { display: none; }
         .region-card.expanded .region-header .stats { display: none; }
         
-        .stat-pill { 
-            padding: 3px 8px; 
-            border-radius: 4px; 
-            font-size: 0.65rem; 
+        .switch-msg {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 8px;
+            display: none;
+            white-space: nowrap;
+        }
+        .switch-msg.success { background: rgba(0,255,136,0.15); color: #00ff88; }
+        .switch-msg.error { background: rgba(255,51,102,0.15); color: #ff3366; }
+        .stat-pill {
             font-family: 'Orbitron', sans-serif;
             display: flex;
             align-items: center;
             gap: 3px;
+            font-size: 0.65rem;
+            padding: 3px 8px;
+            border-radius: 4px;
         }
         .stat-pill.fast { background: rgba(0, 168, 255, 0.2); color: var(--blue-fast); }
         .stat-pill.normal { background: rgba(0, 255, 136, 0.2); color: var(--green-normal); }
@@ -366,7 +376,8 @@
             padding-left: 10px;
         }
         .node-item { background: var(--bg-card); border-radius: 4px; padding: 3px 5px; display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; }
-        .node-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .node-item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+        .node-item .name:hover { text-decoration: underline; color: var(--cyan); }
         .node-item .delay { font-family: 'Orbitron', sans-serif; font-weight: 600; margin-left: 4px; }
         .node-item .delay.fast { color: var(--blue-fast); }
         .node-item .delay.normal { color: var(--green-normal); }
@@ -547,6 +558,12 @@
             });
         }
 
+        // Escape string for use inside a JavaScript single-quoted string
+        function escapeJsStr(str) {
+            if (!str) return '';
+            return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
         // Wave animated digits helper
         // Converts a number/string into individual <span> chars with staggered wave animation.
         function waveDigits(value, suffix) {
@@ -714,7 +731,10 @@
                     return;
                 }
                 // Refresh triggered, now fetch the latest data (OpenClash has updated)
-                fetchDataAndUpdate();
+                fetchDataAndUpdate().finally(function() {
+                    isRefreshing = false;
+                    showRefreshingIndicator(false);
+                });
                 // Show success message in unified page-message area
                 var r = document.getElementById('page-message');
                 if (r) {
@@ -747,7 +767,7 @@ function fetchDataAndUpdate() {
             var controller = new AbortController();
             var timeoutId = setTimeout(function() { controller.abort(); }, 8000);
 
-            fetch('/api/data', { signal: controller.signal })
+            return fetch('/api/data', { signal: controller.signal })
                 .then(function(r) { clearTimeout(timeoutId); return r.json(); })
                 .then(function(d) {
                     // Update stats with wave animation
@@ -792,12 +812,14 @@ function fetchDataAndUpdate() {
                         html += '<span class="stat-pill normal">✅ ' + waveDigits(region.stats.normal) + '</span>';
                         html += '<span class="stat-pill high-latency">⚠️ ' + waveDigits(region.stats.high_latency) + '</span>';
                         html += '<span class="stat-pill fault">❌ ' + waveDigits(region.stats.fault) + '</span>';
-                        html += '</div></div>';
+                        html += '</div>';
+                        html += '<span class="switch-msg" id="switch-msg-' + region.name + '"></span>';
+                        html += '</div>';
                         html += '<div class="region-content' + (isExpanded ? ' show' : '') + '" id="content-' + region.name + '">';
                         html += '<div class="node-grid">';
                         region.nodes.forEach(function(node) {
                             var twFlagImg = region.name === '中国台湾' ? '<img class="node-flag-img" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzNiAzNiI+PHBhdGggZmlsbD0iI0ZFMDAwMCIgZD0iTTMyIDVIMTd2MTNIMHY5YzAgMi4yMDkgMS43OTEgNCA0IDRoMjhjMi4yMDkgMCA0LTEuNzkxIDQtNFY5YzAtMi4yMDktMS43OTEtNC00LTR6Ii8+PHBhdGggZmlsbD0iIzAwMDA5NSIgZD0iTTE3IDVINEMxLjc5MSA1IDAgNi43OTEgMCA5djloMTdWNXptLTYuMDYzIDQuNjFsMi4wMzUtLjU0OC0xLjQ5MSAxLjQ4N2MtLjEyMS0uMzQ4LS4zMDctLjY2NS0uNTQ0LS45Mzl6bS4yNTEgMS44OWMwIDEuMzQ2LTEuMDkxIDIuNDM4LTIuNDM4IDIuNDM4UzYuMzEyIDEyLjg0NiA2LjMxMiAxMS41IDcuNDA0IDkuMDYyIDguNzUgOS4wNjJzMi40MzggMS4wOTIgMi40MzggMi40Mzh6bTAtNC4yMjJsLS41NDggMi4wMzVjLS4yNzMtLjIzNy0uNTkxLS40MjMtLjkzOS0uNTQ0bDEuNDg3LTEuNDkxek04Ljc1IDYuNjI1bC41NDIgMi4wMzRjLS4xNzUtLjAzMy0uMzU3LS4wNTItLjU0Mi0uMDUycy0uMzY3LjAxOS0uNTQyLjA1MmwuNTQyLTIuMDM0em0tLjk1MSAyLjE0NGMtLjM0OC4xMjEtLjY2NS4zMDctLjkzOS41NDRsLS41NDgtMi4wMzUgMS40ODcgMS40OTF6bS0xLjIzNi44NDFjLS4yMzcuMjczLS40MjMuNTkxLS41NDQuOTM5TDQuNTI4IDkuMDYybDIuMDM1LjU0OHptLS42NTQgMS4zNDhjLS4wMzQuMTc2LS4wNTIuMzU3LS4wNTIuNTQyIDAgLjE4NSAwMS44LjM2Ny4wNTIuNTQyTDMuODc1IDExLjVsMi4wMzQtLjU0OHptLjExIDEuNDkyYy4xMjEuMzQ4LjMwOC42NjYuNTQ0LjkzOWwtMi4wMzUuNTQ4IDEuNDkxLTEuNDg3em0yLjI5MyAzLjI3MmwuNTQ4LTIuMDM1Yy4yNzMuMjM2LjU5MS40MjMuOTM5LjU0NGwtMS40ODcgMS40OTF6bTIuNDM4LjY1M2wtLjU0Mi0yLjAzNGMuMTc2LjAzNC4zNTcuMDUyLjU0Mi4wNTJzLjM2Ny0uMDE4LjU0Mi0uMDUybC0uNTQyIDIuMDM0em0uOTUxLTIuMTQ0Yy4zNDgtLjEyMS42NjYtLjMwOC45MzktLjU0NGwuNTQ4IDIuMDM1LTEuNDg3LTEuNDkxeiIvPjwvc3ZnPgo=" alt="TW">' : '';
-                            html += '<div class="node-item">' + twFlagImg + '<span class="name">' + escapeHtml(node.name) + '</span><span class="delay ' + node.category + '">' + node.delay + 'ms</span></div>';
+                            html += '<div class="node-item">' + twFlagImg + '<span class="name" onclick="event.stopPropagation(); switchNode(\'' + escapeJsStr(node.original_name) + '\', \'' + escapeJsStr(region.name) + '\')">' + escapeHtml(node.name) + '</span><span class="delay ' + node.category + '">' + node.delay + 'ms</span></div>';
                         });
                         html += '</div></div></div>';
                     });
@@ -917,6 +939,54 @@ function fetchDataAndUpdate() {
                 r.textContent = '测试失败: ' + e.message;
                 r.className = 'error';
                 autoHidePageMsg(r);
+            });
+        }
+
+        function switchNode(nodeName, regionName) {
+            console.log('switchNode called:', nodeName, regionName);
+            var r = document.getElementById('switch-msg-' + regionName);
+            console.log('switch-msg element:', r);
+            if (!r) return;
+            r.textContent = '切换中...';
+            r.className = 'switch-msg';
+            r.style.display = 'inline-block';
+            fetch('/api/switch', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({node_name: nodeName})
+            }).then(function(x) { return x.json(); }).then(function(d) {
+                if (d.success) {
+                    r.textContent = '切换成功 ✓';
+                    r.className = 'switch-msg success';
+                    refreshData();
+                } else {
+                    r.textContent = '切换失败 ✗';
+                    r.className = 'switch-msg error';
+                    r.style.whiteSpace = 'normal';
+                    r.style.maxWidth = '200px';
+                    // 在 page-message 显示详细信息
+                    var pg = document.getElementById('page-message');
+                    if (pg) {
+                        pg.textContent = '切换失败 ✗ ' + (d.message || '');
+                        pg.className = 'error';
+                        pg.style.display = 'block';
+                        autoHidePageMsg(pg);
+                    }
+                }
+                setTimeout(function() { r.style.display = 'none'; r.style.whiteSpace = 'nowrap'; r.style.maxWidth = ''; }, 3000);
+            }).catch(function(e) {
+                r.textContent = '切换失败 ✗';
+                r.className = 'switch-msg error';
+                r.style.whiteSpace = 'normal';
+                r.style.maxWidth = '200px';
+                var pg = document.getElementById('page-message');
+                if (pg) {
+                    pg.textContent = '切换失败 ✗ ' + e.message;
+                    pg.className = 'error';
+                    pg.style.display = 'block';
+                    autoHidePageMsg(pg);
+                }
+                setTimeout(function() { r.style.display = 'none'; r.style.whiteSpace = 'nowrap'; r.style.maxWidth = ''; }, 3000);
             });
         }
 

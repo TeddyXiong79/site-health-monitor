@@ -48,10 +48,11 @@ func ProcessNodes(rawNodes []OpenClashNode) ([]Node, Stats) {
 		displayName = hyphenReplacer.Replace(displayName)
 
 		nodes = append(nodes, Node{
-			Name:     displayName,
-			Delay:    n.Latency,
-			Category: category,
-			Region:   region,
+			Name:         displayName,
+			OriginalName: name,
+			Delay:        n.Latency,
+			Category:     category,
+			Region:       region,
 		})
 
 		// 更新统计

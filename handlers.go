@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/subtle"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"log"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 
 var dashboardTemplate *template.Template
 
-const appVersion = "v1.5.1"
+const appVersion = "v1.5.2"
 
 func init() {
 	parseTemplates()
@@ -34,6 +35,8 @@ func parseTemplates() {
 			s = strings.ReplaceAll(s, "\"", "&quot;")
 			s = strings.ReplaceAll(s, "<", "&lt;")
 			s = strings.ReplaceAll(s, ">", "&gt;")
+			s = strings.ReplaceAll(s, "`", "&#96;")
+			s = strings.ReplaceAll(s, "$", "&#36;")
 			return s
 		},
 		"regionFlag": func(name string) string {
@@ -382,6 +385,30 @@ func validateToken(r *http.Request) bool {
 	}
 	token := strings.TrimPrefix(auth, "Bearer ")
 	return subtle.ConstantTimeCompare([]byte(token), []byte(GetConfig().APISecret)) == 1
+}
+
+// APISwitchProxy 设置 🔰国外流量 策略组的当前代理
+func APISwitchProxy(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		NodeName string `json:"node_name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.NodeName == "" {
+		http.Error(w, "node_name is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := SwitchProxy(GetConfig(), req.NodeName); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: fmt.Sprintf("已将 🔰国外流量 切换至 %s", req.NodeName)})
 }
 
 // regionCodeToName 转换区域简码到完整名称
