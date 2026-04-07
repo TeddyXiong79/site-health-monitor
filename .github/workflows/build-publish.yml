@@ -10,8 +10,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}
-  IMAGE_TAG: ${{ github.repository_owner }}/site-health-monitor
+  # MUST be lowercase — Docker registry requirement
+  IMAGE_NAME: ${{ lower(github.repository_owner) }}/site-health-monitor
 
 jobs:
   build-push:
@@ -42,8 +42,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/site-health-monitor
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=ref,event=branch
             type=semver,pattern={{version}}
@@ -55,7 +54,7 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --load \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/site-health-monitor:amd64-test \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-test \
             .
 
       - name: Build arm64
@@ -63,7 +62,7 @@ jobs:
           docker buildx build \
             --platform linux/arm64 \
             --load \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/site-health-monitor:arm64-test \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-test \
             .
 
       - name: Push multi-platform manifest
@@ -72,5 +71,5 @@ jobs:
           docker buildx build \
             --platform linux/amd64,linux/arm64 \
             --push \
-            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/site-health-monitor:latest \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
             .
