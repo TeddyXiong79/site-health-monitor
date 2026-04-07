@@ -37,6 +37,27 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Inspect buildx
+        run: |
+          docker buildx version
+          docker buildx ls
+
+      - name: Build amd64
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --load \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:amd64-test \
+            .
+
+      - name: Build arm64
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            --load \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:arm64-test \
+            .
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -48,12 +69,11 @@ jobs:
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true
+      - name: Push multi-platform manifest
+        if: github.event_name != 'pull_request'
+        run: |
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --push \
+            --tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
+            .
