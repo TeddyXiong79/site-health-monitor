@@ -17,8 +17,7 @@ jobs:
 
     env:
       REGISTRY: ghcr.io
-      # MUST be lowercase — Docker registry requirement
-      IMAGE_NAME: ${{ lower(github.repository_owner) }}/site-health-monitor
+      IMAGE_NAME: teddyxiong79/site-health-monitor
 
     steps:
       - name: Checkout code
