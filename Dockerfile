@@ -16,11 +16,14 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -o site-health-monitor .
 
-# Stage 2: scratch (empty, ultra-minimal)
+# Stage 2: scratch (empty, ultra-mininal)
 FROM scratch
+
+WORKDIR /
 
 COPY --from=builder /src/site-health-monitor /site-health-monitor
 COPY --from=builder /src/config.json /config.json
+COPY --from=builder /src/templates /templates
 
 EXPOSE 9099
 

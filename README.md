@@ -34,14 +34,16 @@
 # 拉取并运行（使用默认空配置，首次需在 Dashboard 配置）
 docker run -d \
   --name site-health-monitor \
+  --restart always \
   -p 9099:9099 \
   ghcr.io/teddyxiong79/site-health-monitor:latest
 
-# 挂载自定义配置文件
+# 挂载配置文件（配置持久化，重启后不丢失）
 docker run -d \
   --name site-health-monitor \
+  --restart always \
   -p 9099:9099 \
-  -v /path/to/config.json:/config.json \
+  -v $(pwd)/config.json:/config.json \
   ghcr.io/teddyxiong79/site-health-monitor:latest
 ```
 
