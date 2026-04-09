@@ -1,6 +1,9 @@
 # Stage 1: Build
 FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
+# 启用自动工具链下载，让 Go 1.24 基础镜像自动获取 go.mod 要求的 Go 1.26+
+ENV GOTOOLCHAIN=auto
+
 WORKDIR /src
 
 COPY go.mod go.sum ./
