@@ -5,11 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
 )
+
+// maxResponseSize 限制上游响应体最大为 10MB，防止 OOM
+const maxResponseSize = 10 * 1024 * 1024
 
 var httpClient = &http.Client{
 	Timeout: 5 * time.Second,
@@ -27,6 +31,11 @@ var switchProxyClient = &http.Client{
 func fetchProxies(cfg Config) (*OpenClashResponse, error) {
 	if cfg.APIAddress == "" {
 		return nil, errors.New("API地址未配置")
+	}
+
+	// SSRF 防护：验证地址合法性
+	if err := validateAPIAddress(cfg.APIAddress); err != nil {
+		return nil, err
 	}
 
 	url := fmt.Sprintf("http://%s:%s/proxies", cfg.APIAddress, cfg.APISourcePort)
@@ -47,12 +56,12 @@ func fetchProxies(cfg Config) (*OpenClashResponse, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	var result OpenClashResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxResponseSize)).Decode(&result); err != nil {
 		return nil, fmt.Errorf("解析响应失败: %w", err)
 	}
 
@@ -105,12 +114,18 @@ func FetchNodes(cfg Config) ([]OpenClashNode, error) {
 		if len(proxy.History) > 0 {
 			delay = proxy.History[len(proxy.History)-1].Delay
 		} else if proxy.Extra != nil {
-			// 尝试从 extra 中获取延迟（部分节点格式），取最新的
+			// 尝试从 extra 中获取延迟（部分节点格式）
+			// Go map 遍历顺序不确定，取 history 最长的条目（包含最新数据）
+			bestDelay := 0
+			maxHistoryLen := 0
 			for _, extra := range proxy.Extra {
-				if len(extra.History) > 0 {
-					delay = extra.History[len(extra.History)-1].Delay
-					break
+				if len(extra.History) > maxHistoryLen {
+					maxHistoryLen = len(extra.History)
+					bestDelay = extra.History[len(extra.History)-1].Delay
 				}
+			}
+			if maxHistoryLen > 0 {
+				delay = bestDelay
 			}
 		}
 
@@ -185,6 +200,9 @@ func TriggerDelayCheck(cfg Config) error {
 	if cfg.APIAddress == "" {
 		return fmt.Errorf("API地址未配置")
 	}
+	if err := validateAPIAddress(cfg.APIAddress); err != nil {
+		return err
+	}
 	groupName := "🔰国外流量"
 
 	encodedGroup := url.PathEscape(groupName)
@@ -220,7 +238,7 @@ func TriggerDelayCheck(cfg Config) error {
 		return fmt.Errorf("OpenClash服务器错误 (%d)", resp.StatusCode)
 	}
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -231,6 +249,9 @@ func TriggerDelayCheck(cfg Config) error {
 func SwitchProxy(cfg Config, nodeName string) error {
 	if cfg.APIAddress == "" {
 		return fmt.Errorf("API地址未配置")
+	}
+	if err := validateAPIAddress(cfg.APIAddress); err != nil {
+		return err
 	}
 	groupName := "🔰国外流量"
 
@@ -263,9 +284,28 @@ func SwitchProxy(cfg Config, nodeName string) error {
 		return fmt.Errorf("OpenClash服务器错误 (%d)", resp.StatusCode)
 	}
 	if resp.StatusCode != 200 && resp.StatusCode != 204 {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponseSize))
 		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
 	}
 
+	return nil
+}
+
+// validateAPIAddress 验证 API 地址合法性，防止 SSRF 攻击
+func validateAPIAddress(addr string) error {
+	if addr == "" {
+		return fmt.Errorf("API地址不能为空")
+	}
+	// 禁止包含 URL scheme 或路径
+	if strings.Contains(addr, "://") || strings.Contains(addr, "/") {
+		return fmt.Errorf("API地址格式错误：不能包含协议或路径")
+	}
+	// 解析为 IP 并检查是否为回环/不可路由地址
+	ip := net.ParseIP(addr)
+	if ip != nil {
+		if ip.IsLoopback() || ip.IsUnspecified() {
+			return fmt.Errorf("不允许使用回环或不可路由地址")
+		}
+	}
 	return nil
 }

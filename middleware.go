@@ -1,7 +1,9 @@
 package main
 
 import (
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -67,8 +69,22 @@ func (i *ipLimiter) Stop() {
 }
 
 func (i *ipLimiter) getLimiter(ip string) *rate.Limiter {
+	// 先用读锁快速检查
+	i.mu.RLock()
+	if existingLim, exists := i.ips[ip]; exists {
+		i.mu.RUnlock()
+		// 更新 lastSeen 需要写锁
+		i.mu.Lock()
+		i.lastSeen[ip] = time.Now()
+		i.mu.Unlock()
+		return existingLim
+	}
+	i.mu.RUnlock()
+
+	// 升级为写锁创建新 limiter
 	i.mu.Lock()
 	defer i.mu.Unlock()
+	// 双检锁：可能已被其他 goroutine 创建
 	if existingLim, exists := i.ips[ip]; exists {
 		i.lastSeen[ip] = time.Now()
 		return existingLim
@@ -79,10 +95,31 @@ func (i *ipLimiter) getLimiter(ip string) *rate.Limiter {
 	return newLim
 }
 
+// extractIP 从请求中提取客户端真实 IP（支持反向代理）
+func extractIP(r *http.Request) string {
+	// 优先检查 X-Real-IP
+	if ip := r.Header.Get("X-Real-IP"); ip != "" {
+		return ip
+	}
+	// 再检查 X-Forwarded-For（取第一个）
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		if idx := strings.Index(xff, ","); idx != -1 {
+			return strings.TrimSpace(xff[:idx])
+		}
+		return strings.TrimSpace(xff)
+	}
+	// 最后用 RemoteAddr，去掉端口号
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
 func rateLimitMiddleware(limiter *ipLimiter) mux.MiddlewareFunc {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ip := r.RemoteAddr
+			ip := extractIP(r)
 			if !limiter.getLimiter(ip).Allow() {
 				http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
 				return

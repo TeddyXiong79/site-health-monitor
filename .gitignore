@@ -1,13 +1,9 @@
-# Binaries
+# 配置文件（含敏感信息）
+config.json
+
+# 编译产物
 site-health-monitor
-site-health-monitor.exe
 *.exe
-
-# Logs
-*.log
-
-# macOS
-.DS_Store
 
 # IDE
 .idea/
@@ -15,8 +11,6 @@ site-health-monitor.exe
 *.swp
 *.swo
 
-# Git
-.git/
-
-# Local config override (keep config.json as default)
-# config.json is committed so new users have a template
+# OS
+.DS_Store
+Thumbs.db

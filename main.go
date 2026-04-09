@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -15,7 +17,7 @@ func main() {
 	}
 
 	// 设置路由
-	router, limiter := SetupRouter()
+	router, externalLimiter, internalLimiter := SetupRouter()
 
 	// 创建 HTTP 服务器
 	addr := ":" + GetConfig().Port
@@ -41,10 +43,13 @@ func main() {
 	log.Println("正在关闭服务器...")
 
 	// 关闭限流器后台清理 goroutine
-	limiter.Stop()
+	externalLimiter.Stop()
+	internalLimiter.Stop()
 
-	// 优雅关闭
-	if err := srv.Close(); err != nil {
+	// 优雅关闭：等待最多 10 秒让正在处理的请求完成
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
 		log.Fatalf("服务器关闭失败: %v", err)
 	}
 

@@ -470,7 +470,7 @@
                 <span class="total-nodes" id="total-nodes">共 {{.Data.Stats.Total}} 节点</span>
                 <span class="info">
                     <span id="update-time">{{.Data.UpdateTime}}</span>
-                    <span class="countdown" id="countdown" onclick="refreshData()" style="cursor:pointer;">{{.Data.Config.RefreshSeconds}}s</span>
+                    <span class="countdown" id="countdown" onclick="refreshData()" style="cursor:pointer;">{{.Data.SafeConfig.RefreshSeconds}}s</span>
                 </span>
             </div>
         
@@ -508,13 +508,7 @@
 
         <div class="token-display" id="token-display">
             <span class="token-label">对外API调用密钥：</span>
-            <span class="token-value" id="token-value" data-token="{{.Data.Config.APISecret}}" onclick="copyToken()">{{maskToken .Data.Config.APISecret}}</span>
-            <button class="token-eye" id="token-eye" onmousedown="showToken()" onmouseup="hideToken()" onmouseleave="hideToken()">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
-                    <circle cx="12" cy="12" r="3"></circle>
-                </svg>
-            </button>
+            <span class="token-value" id="token-value">{{.Data.SafeConfig.MaskedSecret}}</span>
         </div>
 
         <div class="config">
@@ -522,15 +516,15 @@
             <div class="config-info">
                 <div class="config-row">
                     <span class="config-label" style="margin-left:20px;">数据源地址</span>
-                    <input type="text" id="apiAddress" value="{{escapeAttr .Data.Config.APIAddress}}" placeholder="例如: 10.0.0.1" autocomplete="off" style="width:120px;">
+                    <input type="text" id="apiAddress" value="{{escapeAttr .Data.SafeConfig.APIAddress}}" placeholder="例如: 10.0.0.1" autocomplete="off" style="width:120px;">
                     <span class="config-label" style="margin-left:40px;">数据源端口</span>
-                    <input type="text" id="apiSourcePort" value="{{.Data.Config.APISourcePort}}" placeholder="9090" style="width:70px;">
+                    <input type="text" id="apiSourcePort" value="{{.Data.SafeConfig.APISourcePort}}" placeholder="9090" style="width:70px;">
                 </div>
                 <div class="config-row">
                     <span class="config-label" style="margin-left:20px;">数据源密钥</span>
                     <input type="password" id="apiSecret" value="" placeholder="（留空则不修改）" style="width:120px;">
                     <span class="config-label" style="margin-left:40px;">刷新时间（秒）</span>
-                    <input type="number" id="refreshSeconds" value="{{.Data.Config.RefreshSeconds}}" placeholder="20" style="width:70px;">
+                    <input type="number" id="refreshSeconds" value="{{.Data.SafeConfig.RefreshSeconds}}" placeholder="20" style="width:70px;">
                 </div>
             </div>
             <div class="config-actions">
@@ -584,33 +578,6 @@
             return html;
         }
 
-        var _originalToken = '';
-        function showToken() {
-            var el = document.getElementById('token-value');
-            if (el) {
-                _originalToken = el.getAttribute('data-token');
-                el.textContent = _originalToken;
-            }
-        }
-        function hideToken() {
-            var el = document.getElementById('token-value');
-            if (el && _originalToken.length > 4) {
-                el.textContent = _originalToken.substring(0, 2) + '***' + _originalToken.substring(_originalToken.length - 2);
-            }
-        }
-        function copyToken() {
-            var el = document.getElementById('token-value');
-            if (el) {
-                var token = el.getAttribute('data-token');
-                navigator.clipboard.writeText(token).then(function() {
-                    el.textContent = '已复制!';
-                    setTimeout(function() {
-                        hideToken();
-                    }, 2000);
-                });
-            }
-        }
-
         // Render wave digits into an element; adds a brief pop effect on value change.
         var _prevWaveValues = {};
         function setWaveDigits(el, value, suffix) {
@@ -632,13 +599,15 @@
             });
         }
 
-        // Matrix Rain Effect
+        // Matrix Rain Effect — 移动端禁用以节省性能
+        var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         const canvas = document.getElementById('matrixCanvas');
         const ctx = canvas.getContext('2d');
         
         canvas.width = window.innerWidth;
         canvas.height = window.innerHeight;
         
+        if (!isMobile) {
         const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789@#$%^&*()_+-=[]{}|;:,.<>?';
         const charArray = chars.split('');
         const fontSize = 14;
@@ -679,9 +648,13 @@
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
         });
+        } else {
+            // 移动端隐藏 canvas
+            canvas.style.display = 'none';
+        }
         
         // --- AJAX auto-refresh: preserves expanded region state ---
-        var refreshInterval = {{.Data.Config.RefreshSeconds}};
+        var refreshInterval = {{.Data.SafeConfig.RefreshSeconds}};
         var seconds = refreshInterval;
         var isRefreshing = false;
 
@@ -708,6 +681,7 @@
             var refreshTimeoutId = setTimeout(function() { refreshController.abort(); }, 30000);
             fetch('/api/refresh', {
                 method: 'POST',
+                headers: {'Content-Type': 'application/json'},
                 signal: refreshController.signal
             })
             .then(function(r) { clearTimeout(refreshTimeoutId); return r.json(); })
@@ -768,7 +742,15 @@ function fetchDataAndUpdate() {
             var timeoutId = setTimeout(function() { controller.abort(); }, 8000);
 
             return fetch('/api/data', { signal: controller.signal })
-                .then(function(r) { clearTimeout(timeoutId); return r.json(); })
+                .then(function(r) {
+                    clearTimeout(timeoutId);
+                    if (!r.ok) {
+                        return r.json().then(function(errData) {
+                            throw new Error(errData.error || 'HTTP ' + r.status);
+                        });
+                    }
+                    return r.json();
+                })
                 .then(function(d) {
                     // Update stats with wave animation
                     setWaveDigits(document.getElementById('stat-fast'), d.stats.fast);
@@ -831,6 +813,7 @@ function fetchDataAndUpdate() {
                 })
                 .catch(function(err) {
                     console.error('Data fetch failed:', err);
+                    seconds = refreshInterval;
                     isRefreshing = false;
                     showRefreshingIndicator(false);
                     var countdownEl = document.getElementById('countdown');
@@ -842,8 +825,10 @@ function fetchDataAndUpdate() {
         }
 
         setInterval(function() {
+            if (isRefreshing) return;
             seconds--;
             if (seconds <= 0) {
+                seconds = refreshInterval; // 立即重置，防止重复触发
                 refreshData();
             }
             document.getElementById('countdown').textContent = Math.max(seconds, 0) + 's';
@@ -884,11 +869,12 @@ function fetchDataAndUpdate() {
                 body: JSON.stringify(payload)
             }).then(function(x) { return x.json(); }).then(function(d) {
                 if (d.success) {
-                    // 如果输入了新密钥，同步更新对外API调用密钥显示
+                    // 如果输入了新密钥，同步更新脱敏显示
                     if (payload.api_secret) {
                         var tokenEl = document.getElementById('token-value');
-                        tokenEl.setAttribute('data-token', payload.api_secret);
-                        tokenEl.textContent = payload.api_secret.substring(0, 2) + '***' + payload.api_secret.substring(payload.api_secret.length - 2);
+                        if (tokenEl && payload.api_secret.length > 4) {
+                            tokenEl.textContent = payload.api_secret.substring(0, 2) + '***' + payload.api_secret.substring(payload.api_secret.length - 2);
+                        }
                     }
                     refreshInterval = payload.refresh_seconds || refreshInterval;
                     seconds = refreshInterval;
@@ -917,12 +903,7 @@ function fetchDataAndUpdate() {
             r.textContent = '连接测试中...';
             r.className = '';
             r.style.display = 'block';
-            // 如果密码框为空，使用页面上已有的token
             var secretInput = document.getElementById('apiSecret').value;
-            if (!secretInput) {
-                var tokenEl = document.getElementById('token-value');
-                secretInput = tokenEl.getAttribute('data-token') || '';
-            }
             fetch('/api/test', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},

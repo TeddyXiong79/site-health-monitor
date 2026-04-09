@@ -1,5 +1,5 @@
 # Stage 1: Build
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS builder
+FROM --platform=$BUILDPLATFORM golang:1.24-alpine AS builder
 
 WORKDIR /src
 
@@ -16,14 +16,24 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -o site-health-monitor .
 
-# Stage 2: scratch (empty, ultra-mininal)
+# Stage 2: CA 证书 + 创建数据目录
+FROM alpine:latest AS certs
+RUN apk --no-cache add ca-certificates && mkdir -p /data
+
+# Stage 3: scratch (ultra-minimal)
 FROM scratch
 
 WORKDIR /
 
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=certs /data /data
 COPY --from=builder /src/site-health-monitor /site-health-monitor
-COPY --from=builder /src/config.json /config.json
 COPY --from=builder /src/templates /templates
+
+# 配置数据持久化目录
+# Docker 自动创建匿名 volume，容器 restart/stop/start 时数据不丢失
+# docker rm -v 时会同步删除 volume，彻底清理
+VOLUME /data
 
 EXPOSE 9099
 

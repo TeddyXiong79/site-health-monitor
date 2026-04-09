@@ -45,8 +45,16 @@ type DashboardData struct {
     Version    string
     Stats      Stats
     Regions    []Region
-    Config     Config
+    SafeConfig SafeConfig
     UpdateTime string
+}
+
+// SafeConfig 不含敏感信息的配置，供前端渲染使用
+type SafeConfig struct {
+    APIAddress     string
+    APISourcePort  string
+    MaskedSecret   string // 脱敏后的密钥，如 "VM***1!"
+    RefreshSeconds int
 }
 
 type RegionConfig struct {

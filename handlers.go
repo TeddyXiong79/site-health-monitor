@@ -15,7 +15,7 @@ import (
 
 var dashboardTemplate *template.Template
 
-const appVersion = "v1.5.2"
+const appVersion = "v1.6.0"
 
 func init() {
 	parseTemplates()
@@ -61,19 +61,15 @@ func parseTemplates() {
 			}
 			return en[name]
 		},
-		"maskToken": func(token string) string {
-			if len(token) <= 4 {
-				return token
-			}
-			return token[:2] + "***" + token[len(token)-2:]
-		},
+		"maskToken": maskToken,
 	}
 	dashboardTemplate = template.New("dashboard.html").Funcs(funcs)
 	dashboardTemplate = template.Must(dashboardTemplate.ParseFiles("templates/dashboard.html"))
 }
 
 func RenderDashboard(w http.ResponseWriter, r *http.Request) {
-	nodes, err := FetchNodes(GetConfig())
+	cfg := GetConfig()
+	nodes, err := FetchNodesCached(cfg)
 	if err != nil {
 		log.Printf("FetchNodes error: %v", err)
 		nodes = []OpenClashNode{}
@@ -85,17 +81,26 @@ func RenderDashboard(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	updateTime := now.Format("Jan 02 at 15:04")
 
-	data := DashboardData{
-		Version:     appVersion,
-		Stats:       stats,
-		Regions:     regions,
-		Config:      GetConfig(),
-		UpdateTime:  updateTime,
+	safeConfig := SafeConfig{
+		APIAddress:     cfg.APIAddress,
+		APISourcePort:  cfg.APISourcePort,
+		MaskedSecret:   maskToken(cfg.APISecret),
+		RefreshSeconds: cfg.RefreshSeconds,
 	}
 
-	dashboardTemplate.Execute(w, map[string]interface{}{
+	data := DashboardData{
+		Version:    appVersion,
+		Stats:      stats,
+		Regions:    regions,
+		SafeConfig: safeConfig,
+		UpdateTime: updateTime,
+	}
+
+	if err := dashboardTemplate.Execute(w, map[string]interface{}{
 		"Data": data,
-	})
+	}); err != nil {
+		log.Printf("模板渲染失败: %v", err)
+	}
 }
 
 type APIResponse struct {
@@ -107,11 +112,12 @@ type APIResponse struct {
 func APIGetData(w http.ResponseWriter, r *http.Request) {
 	// 内部 API，无需认证（Dashboard 同源调用）
 
-	nodes, err := FetchNodes(GetConfig())
+	nodes, err := FetchNodesCached(GetConfig())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 		w.Header().Set("Pragma", "no-cache")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"error":       err.Error(),
 			"stats":       Stats{},
@@ -143,9 +149,10 @@ func APIGetSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodes, err := FetchNodes(GetConfig())
+	nodes, err := FetchNodesCached(GetConfig())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
@@ -163,9 +170,10 @@ func APIGetNodes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodes, err := FetchNodes(GetConfig())
+	nodes, err := FetchNodesCached(GetConfig())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
@@ -185,9 +193,10 @@ func APIGetRegions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	nodes, err := FetchNodes(GetConfig())
+	nodes, err := FetchNodesCached(GetConfig())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
@@ -199,18 +208,6 @@ func APIGetRegions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Pragma", "no-cache")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"regions": regions,
-	})
-}
-
-func APIGetToken(w http.ResponseWriter, r *http.Request) {
-	if !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"token": GetConfig().APISecret,
 	})
 }
 
@@ -229,6 +226,7 @@ func APIRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	InvalidateCache()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "延迟检查已触发，请稍后刷新获取最新数据"})
 }
@@ -243,9 +241,10 @@ func APIGetRegionNodes(w http.ResponseWriter, r *http.Request) {
 	regionCode := vars["region"]
 	regionName := regionCodeToName(regionCode)
 
-	nodes, err := FetchNodes(GetConfig())
+	nodes, err := FetchNodesCached(GetConfig())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
@@ -283,9 +282,10 @@ func APIGetNodeFilter(w http.ResponseWriter, r *http.Request) {
 	regionCode := r.URL.Query().Get("region")
 	category := r.URL.Query().Get("category")
 
-	nodes, err := FetchNodes(GetConfig())
+	nodes, err := FetchNodesCached(GetConfig())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
@@ -319,9 +319,10 @@ func APIGetNodeDetail(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	nodeName := vars["name"]
 
-	nodes, err := FetchNodes(GetConfig())
+	nodes, err := FetchNodesCached(GetConfig())
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
@@ -340,6 +341,7 @@ func APIGetNodeDetail(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
 	w.Header().Set("Pragma", "no-cache")
+	w.WriteHeader(http.StatusNotFound)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"error": "node not found",
 	})
@@ -348,6 +350,8 @@ func APIGetNodeDetail(w http.ResponseWriter, r *http.Request) {
 func APISaveConfig(w http.ResponseWriter, r *http.Request) {
 	var cfg Config
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "无效的请求"})
 		return
 	}
@@ -355,18 +359,25 @@ func APISaveConfig(w http.ResponseWriter, r *http.Request) {
 	// 保留服务端口，不允许用户修改
 	cfg.Port = GetConfig().Port
 
+	// 密钥留空时保留原密钥（前端 placeholder 承诺"留空则不修改"）
+	if cfg.APISecret == "" {
+		cfg.APISecret = GetConfig().APISecret
+	}
+
 	if err := SaveConfig(cfg); err != nil {
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
 		return
 	}
 
-	SetConfig(cfg)
+	InvalidateCache()
 	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "配置已保存"})
 }
 
 func APITestConnection(w http.ResponseWriter, r *http.Request) {
 	var cfg Config
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "无效的请求"})
 		return
 	}
@@ -376,7 +387,8 @@ func APITestConnection(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateToken(r *http.Request) bool {
-	if GetConfig().APISecret == "" {
+	cfg := GetConfig()
+	if cfg.APISecret == "" {
 		return false
 	}
 	auth := r.Header.Get("Authorization")
@@ -384,7 +396,7 @@ func validateToken(r *http.Request) bool {
 		return false
 	}
 	token := strings.TrimPrefix(auth, "Bearer ")
-	return subtle.ConstantTimeCompare([]byte(token), []byte(GetConfig().APISecret)) == 1
+	return subtle.ConstantTimeCompare([]byte(token), []byte(cfg.APISecret)) == 1
 }
 
 // APISwitchProxy 设置 🔰国外流量 策略组的当前代理
@@ -422,4 +434,12 @@ func regionCodeToName(code string) string {
 		return "其他地区"
 	}
 	return code
+}
+
+// maskToken 对密钥进行脱敏处理
+func maskToken(token string) string {
+	if len(token) <= 4 {
+		return token
+	}
+	return token[:2] + "***" + token[len(token)-2:]
 }

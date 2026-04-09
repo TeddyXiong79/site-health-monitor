@@ -90,10 +90,6 @@ func categorizeDelay(latency int) string {
 	return "high_latency"
 }
 
-func insertHyphenBeforeRegion(name string) string {
-	return hyphenReplacer.Replace(name)
-}
-
 func categorizeRegion(name string) string {
 	for _, cfg := range RegionConfigs {
 		for _, pattern := range cfg.Patterns {
