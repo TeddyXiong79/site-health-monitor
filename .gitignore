@@ -14,3 +14,9 @@ site-health-monitor
 # OS
 .DS_Store
 Thumbs.db
+
+# WorkBuddy
+.workbuddy/
+
+# Test coverage
+coverage.out

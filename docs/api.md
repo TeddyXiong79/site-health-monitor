@@ -1,7 +1,7 @@
 # 全球代理节点健康监控 - API 接口文档
 
-> **版本**: v1.4.9
-> **更新时间**: 2026-03-24
+> **版本**: v1.6.0
+> **更新时间**: 2026-04-13
 
 ---
 
@@ -146,7 +146,7 @@ curl http://localhost:9099/api/data
 ### 4. 测试数据源连接
 
 **接口**: `POST /api/test`
-**认证**: 无需认证
+**认证**: Bearer Token（首次配置无密钥时允许无认证）
 **用途**: 测试 OpenClash 数据源连接是否正常
 
 **请求体**:
@@ -178,7 +178,7 @@ curl -X POST http://localhost:9099/api/test \
 ### 5. 保存配置
 
 **接口**: `POST /api/config`
-**认证**: 无需认证
+**认证**: Bearer Token（首次配置无密钥时允许无认证）
 **用途**: 保存数据源配置（修改后需要重启刷新才能生效）
 
 **请求体**:
@@ -232,10 +232,10 @@ curl -X POST http://localhost:9099/api/config \
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `total` | int | 节点总数 |
-| `fast` | int | 高速节点 (<150ms) |
-| `normal` | int | 正常节点 (150-219ms) |
-| `high_latency` | int | 低速节点 (220-350ms) |
-| `fault` | int | 故障节点 (>350ms 或 0ms) |
+| `fast` | int | 高速节点 (1-150ms) |
+| `normal` | int | 正常节点 (151-240ms) |
+| `high_latency` | int | 低速节点 (241-500ms) |
+| `fault` | int | 故障节点 (>500ms 或 0ms) |
 | `healthy_count` | int | 健康节点数 (fast + normal) |
 | `healthy_pct` | int | 健康百分比 |
 
@@ -461,26 +461,6 @@ curl -H "Authorization: Bearer VMware1!" \
 
 ---
 
-### 12. 获取当前 API 密钥
-
-**接口**: `GET /api/token`
-**认证**: Bearer Token
-**用途**: 获取当前配置的 API 密钥
-
-**响应示例**:
-```json
-{
-  "token": "VMware1!"
-}
-```
-
-**curl 示例**:
-```bash
-curl -H "Authorization: Bearer VMware1!" http://localhost:9099/api/token
-```
-
----
-
 ## Python 调用示例
 
 ```python
@@ -583,10 +563,6 @@ print(f"香港正常节点: {len(normal_hk['nodes'])}个")
 # 11. 获取单个节点
 node = api_get("/api/nodes/%E5%BA%94%E6%80%A5%E8%8A%82%E7%82%B9")
 print(f"节点: {node['name']}, 延迟: {node['delay']}ms")
-
-# 12. 获取 Token
-token = api_get("/api/token")
-print(f"Token: {token['token']}")
 ```
 
 ---
@@ -620,10 +596,10 @@ Unauthorized
 
 | 类别 | 延迟范围 | 说明 |
 |------|----------|------|
-| `fast` | < 150ms | 高速节点 |
-| `normal` | 150-219ms | 正常节点 |
-| `high_latency` | 220-350ms | 低速节点 |
-| `fault` | > 350ms 或 0ms | 故障节点 |
+| `fast` | 1-150ms | 高速节点 |
+| `normal` | 151-240ms | 正常节点 |
+| `high_latency` | 241-500ms | 低速节点 |
+| `fault` | >500ms 或 0ms | 故障节点 |
 
 ---
 

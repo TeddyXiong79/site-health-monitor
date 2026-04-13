@@ -15,7 +15,7 @@ import (
 
 var dashboardTemplate *template.Template
 
-const appVersion = "v1.6.0"
+const appVersion = "v1.6.1"
 
 func init() {
 	parseTemplates()
@@ -348,6 +348,12 @@ func APIGetNodeDetail(w http.ResponseWriter, r *http.Request) {
 }
 
 func APISaveConfig(w http.ResponseWriter, r *http.Request) {
+	// 已有密钥时要求 Bearer Token 认证（首次配置允许无认证）
+	if GetConfig().APISecret != "" && !validateToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var cfg Config
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -374,6 +380,12 @@ func APISaveConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func APITestConnection(w http.ResponseWriter, r *http.Request) {
+	// 已有密钥时要求 Bearer Token 认证（首次配置允许无认证）
+	if GetConfig().APISecret != "" && !validateToken(r) {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var cfg Config
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -438,8 +450,11 @@ func regionCodeToName(code string) string {
 
 // maskToken 对密钥进行脱敏处理
 func maskToken(token string) string {
+	if token == "" {
+		return ""
+	}
 	if len(token) <= 4 {
-		return token
+		return "***"
 	}
 	return token[:2] + "***" + token[len(token)-2:]
 }

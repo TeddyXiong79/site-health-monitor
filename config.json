@@ -1,6 +1,6 @@
 {
-  "api_address": "",
-  "api_secret": "",
+  "api_address": "192.168.66.251",
+  "api_secret": "new-secret",
   "api_source_port": "9090",
   "port": "9099",
   "refresh_seconds": 120

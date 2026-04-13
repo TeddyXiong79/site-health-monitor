@@ -7,7 +7,7 @@ A real-time visualization Dashboard for monitoring OpenClash proxy node health s
 <p align="center">
   <img src="https://img.shields.io/github/v/release/TeddyXiong79/site-health-monitor?style=flat-square" alt="Release">
   <img src="https://img.shields.io/github/license/TeddyXiong79/site-health-monitor?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go" alt="Go">
+  <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go" alt="Go">
   <img src="https://img.shields.io/badge/Platform-amd64%20%7C%20arm64-blue?style=flat-square" alt="Platform">
 </p>
 
@@ -141,17 +141,17 @@ Config file `config.json`:
 
 ## 📡 API Reference
 
-### Internal APIs (Dashboard same-origin calls, no auth required)
+### Internal APIs (Dashboard same-origin calls)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/` | Dashboard page |
-| GET | `/api/data` | Get current node data and statistics |
-| GET | `/api/health` | Health check |
-| POST | `/api/config` | Save configuration |
-| POST | `/api/test` | Test OpenClash connection |
-| POST | `/api/refresh` | Trigger OpenClash delay check (rate limited: 1/10s) |
-| POST | `/api/switch` | Switch 🔰Foreign Traffic proxy node (rate limited: 1/10s) |
+| Method | Path | Description | Auth |
+|--------|------|-------------|------|
+| GET | `/` | Dashboard page | None |
+| GET | `/api/data` | Get current node data and statistics | None |
+| GET | `/api/health` | Health check | None |
+| POST | `/api/config` | Save configuration | Bearer Token (when secret is set) |
+| POST | `/api/test` | Test OpenClash connection | Bearer Token (when secret is set) |
+| POST | `/api/refresh` | Trigger OpenClash delay check (rate limited: 1/10s) | None |
+| POST | `/api/switch` | Switch 🔰Foreign Traffic proxy node (rate limited: 1/10s) | None |
 
 ### External APIs (Bearer Token auth + rate limited)
 
@@ -208,7 +208,7 @@ Auto-detected regions: Hong Kong, Singapore, Taiwan, Japan, United States, Unite
 | Image | Description |
 |-------|-------------|
 | `ghcr.io/teddyxiong79/site-health-monitor:latest` | Latest stable |
-| `ghcr.io/teddyxiong79/site-health-monitor:v1.6.0` | Specific version |
+| `ghcr.io/teddyxiong79/site-health-monitor:v1.6.1` | Specific version |
 
 Supported platforms: `linux/amd64`, `linux/arm64`.
 
@@ -227,6 +227,13 @@ docker buildx build --platform=linux/amd64,linux/arm64 \
 
 ## 📝 Changelog
 
+- **v1.6.1** — Security hardening + Comprehensive testing + Documentation sync
+  - 🔒 `/api/config` and `/api/test` now require Bearer Token auth (first-time setup without secret is allowed)
+  - 🔒 `maskToken()` fix: short secrets (≤4 chars) no longer exposed in plaintext, returns `***`
+  - 🐛 `ValidateConfig` fix: allows empty API secret (compatible with first-time setup and no-secret OpenClash), added data source address validation
+  - 📝 API docs (`docs/api.md`) fully synced: latency classification aligned with code, removed deprecated `/api/token` endpoint
+  - ✅ Added 40+ unit tests with 100% coverage on core functions
+  - 📦 Windows AMD64 executable available for download
 - **v1.6.0** — Security hardening + Performance optimization + Config persistence
   - 🔒 Removed plaintext secret from Dashboard HTML, introduced SafeConfig masked rendering
   - 🔒 SSRF protection (address validation), response size limit (10MB)

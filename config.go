@@ -115,6 +115,9 @@ func SaveConfig(cfg Config) error {
 }
 
 func ValidateConfig(cfg Config) error {
+    if cfg.APIAddress == "" {
+        return &ConfigError{Field: "api_address", Message: "数据源地址不能为空"}
+    }
     if cfg.APISourcePort == "" {
         return &ConfigError{Field: "api_source_port", Message: "数据源端口不能为空"}
     }
@@ -122,9 +125,8 @@ func ValidateConfig(cfg Config) error {
     if err != nil || port < 1 || port > 65535 {
         return &ConfigError{Field: "api_source_port", Message: "数据源端口必须是 1-65535 之间的数字"}
     }
-    if cfg.APISecret == "" {
-        return &ConfigError{Field: "api_secret", Message: "API密钥不能为空"}
-    }
+    // APISecret 允许为空（首次配置场景 + 部分 OpenClash 部署无密钥）
+    // 密钥为空时外部 API 认证会拒绝所有请求，属于预期行为
     if cfg.RefreshSeconds < 10 || cfg.RefreshSeconds > 3600 {
         return &ConfigError{Field: "refresh_seconds", Message: "刷新间隔必须在 10-3600 秒之间"}
     }

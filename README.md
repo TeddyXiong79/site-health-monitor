@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/github/v/release/TeddyXiong79/site-health-monitor?style=flat-square" alt="Release">
   <img src="https://img.shields.io/github/license/TeddyXiong79/site-health-monitor?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go" alt="Go">
+  <img src="https://img.shields.io/badge/Go-1.26+-00ADD8?style=flat-square&logo=go" alt="Go">
   <img src="https://img.shields.io/badge/Platform-amd64%20%7C%20arm64-blue?style=flat-square" alt="Platform">
 </p>
 
@@ -142,17 +142,17 @@ chmod +x site-health-monitor
 
 ## 📡 API 接口
 
-### 内部接口（Dashboard 同源调用，无需认证）
+### 内部接口（Dashboard 同源调用）
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| GET | `/` | Dashboard 页面 |
-| GET | `/api/data` | 获取当前节点数据和统计 |
-| GET | `/api/health` | 健康检查 |
-| POST | `/api/config` | 保存配置 |
-| POST | `/api/test` | 测试 OpenClash 连接 |
-| POST | `/api/refresh` | 触发 OpenClash 延迟检测（限流：10s/次） |
-| POST | `/api/switch` | 切换 🔰国外流量 代理节点（限流：10s/次） |
+| 方法 | 路径 | 说明 | 认证 |
+|------|------|------|------|
+| GET | `/` | Dashboard 页面 | 无 |
+| GET | `/api/data` | 获取当前节点数据和统计 | 无 |
+| GET | `/api/health` | 健康检查 | 无 |
+| POST | `/api/config` | 保存配置 | 有密钥时需 Bearer Token |
+| POST | `/api/test` | 测试 OpenClash 连接 | 有密钥时需 Bearer Token |
+| POST | `/api/refresh` | 触发 OpenClash 延迟检测（限流：10s/次） | 无 |
+| POST | `/api/switch` | 切换 🔰国外流量 代理节点（限流：10s/次） | 无 |
 
 ### 外部接口（需 Bearer Token 认证 + 限流）
 
@@ -209,7 +209,7 @@ chmod +x site-health-monitor
 | 镜像 | 说明 |
 |------|------|
 | `ghcr.io/teddyxiong79/site-health-monitor:latest` | 最新稳定版 |
-| `ghcr.io/teddyxiong79/site-health-monitor:v1.6.0` | 指定版本 |
+| `ghcr.io/teddyxiong79/site-health-monitor:v1.6.1` | 指定版本 |
 
 支持平台：`linux/amd64`、`linux/arm64`。
 
@@ -228,6 +228,13 @@ docker buildx build --platform=linux/amd64,linux/arm64 \
 
 ## 📝 版本历史
 
+- **v1.6.1** — 安全加固 + 全面测试 + 文档同步
+  - 🔒 `/api/config` 和 `/api/test` 增加 Bearer Token 认证（首次配置无密钥时允许免认证）
+  - 🔒 `maskToken()` 修复：短密钥（≤4字符）不再明文暴露，统一返回 `***`
+  - 🐛 `ValidateConfig` 修复：允许 API 密钥为空（兼容首次配置及无密钥 OpenClash），新增数据源地址非空校验
+  - 📝 API 文档 (`docs/api.md`) 全面同步：延迟分类标准与代码对齐、删除已废弃的 `/api/token` 端点
+  - ✅ 新增 40+ 单元测试，核心函数 100% 覆盖
+  - 📦 提供 Windows AMD64 可执行文件下载
 - **v1.6.0** — 安全加固 + 性能优化 + 配置持久化
   - 🔒 移除 Dashboard HTML 中的明文密钥暴露，引入 SafeConfig 脱敏渲染
   - 🔒 SSRF 防护（地址验证）、响应体大小限制（10MB）
