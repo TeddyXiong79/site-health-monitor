@@ -17,8 +17,8 @@
 - **智能分类** — 按地区（香港/新加坡/台湾/日本/美国等）和延迟等级自动分组
 - **实时统计** — 健康度百分比、高速/正常/低延迟/故障节点数量一目了然
 - **赛博朋克 Dashboard** — Matrix Rain 背景特效、数字波浪动画、移动端自动优化
-- **代理切换** — 点击节点名即可切换 🔰国外流量 代理组，实时反馈
-- **自动刷新** — 可配置定时刷新（默认120秒），支持手动触发延迟检测
+- **代理切换** — 点击节点名即可切换 `🔰国外流量` 策略组的当前节点，实时反馈（组名硬编码，详见下文配置说明）
+- **自动刷新** — 可配置定时刷新（默认**300秒**），支持手动触发延迟检测
 - **对外 API** — Bearer Token 认证的 RESTful API，方便接入 Claw/AI 等系统分析
 - **数据缓存** — 10 秒 TTL 缓存层，避免高并发时对上游 OpenClash 产生重复请求
 - **配置持久化** — Docker Volume 自动持久化，容器重启配置不丢失
@@ -117,6 +117,19 @@ chmod +x site-health-monitor
 
 ## ⚙️ 配置说明
 
+### 🚨 OpenClash 前置要求（重要）
+
+本程序**强制依赖**一个名为 **`🔰国外流量`** 的 OpenClash 策略组（Selector 类型，带 emoji 前缀）。该组名**硬编码**于 `fetcher.go`，以下功能都围绕它工作：
+
+- **延迟刷新**（`POST /api/refresh`）— 触发 `🔰国外流量` 组内所有节点的实时延迟测试
+- **代理切换**（`POST /api/switch`）— 修改 `🔰国外流量` 组当前选中的节点
+
+> ⚠️ 如果你的 OpenClash 配置里没有这个组，或者名字不一样（比如 `🚀节点选择` / `Proxy`），这两个接口会返回 **404 分组不存在**。Dashboard 的节点数据展示不受影响，但"点击切换"和"刷新延迟"功能会失效。
+>
+> 如需使用不同的组名，请修改 `fetcher.go:206` 和 `fetcher.go:256` 两处后重新编译。
+
+### Dashboard 配置项
+
 首次启动后，在 Dashboard 界面填写以下配置：
 
 | 参数 | 说明 | 默认值 |
@@ -124,7 +137,7 @@ chmod +x site-health-monitor
 | 数据源地址 | OpenClash 所在的 IP | - |
 | 数据源端口 | OpenClash API 端口 | `9090` |
 | API 密钥 | OpenClash 控制面板密钥 | - |
-| 刷新时间 | Dashboard 自动刷新间隔（秒） | `120` |
+| 刷新时间 | Dashboard 自动刷新间隔（秒） | `300` |
 
 配置文件 `config.json`：
 
@@ -134,7 +147,7 @@ chmod +x site-health-monitor
   "api_secret": "",
   "api_source_port": "9090",
   "port": "9099",
-  "refresh_seconds": 120
+  "refresh_seconds": 300
 }
 ```
 
@@ -151,8 +164,8 @@ chmod +x site-health-monitor
 | GET | `/api/health` | 健康检查 | 无 |
 | POST | `/api/config` | 保存配置 | 有密钥时需 Bearer Token |
 | POST | `/api/test` | 测试 OpenClash 连接 | 有密钥时需 Bearer Token |
-| POST | `/api/refresh` | 触发 OpenClash 延迟检测（限流：10s/次） | 无 |
-| POST | `/api/switch` | 切换 🔰国外流量 代理节点（限流：10s/次） | 无 |
+| POST | `/api/refresh` | 触发 `🔰国外流量` 组延迟检测（限流：10s/次） | 无 |
+| POST | `/api/switch` | 切换 `🔰国外流量` 组的当前节点（限流：10s/次） | 有密钥时需 Bearer Token |
 
 ### 外部接口（需 Bearer Token 认证 + 限流）
 
@@ -189,11 +202,11 @@ chmod +x site-health-monitor
 | 🚀 高速 | ≤ 150ms | 优质节点 |
 | ✅ 正常 | 151 ~ 240ms | 可用节点 |
 | ⚠️ 低速 | 241 ~ 500ms | 高延迟节点 |
-| ❌ 故障 | > 500ms 或 0ms | 不可用节点 |
+| ❌ 故障 | > 500ms 或 ≤ 0ms | 不可用节点（包括负延迟） |
 
 ## 🌍 地区分类
 
-支持自动识别：香港、新加坡、台湾、日本、美国、英国、德国、土耳其等，未匹配节点归入"其他地区"。
+自动识别五大地区：**中国香港、新加坡、中国台湾、日本、美国**。未匹配的节点统一归入"其他地区"。
 
 ## 🔒 安全特性
 
@@ -209,7 +222,7 @@ chmod +x site-health-monitor
 | 镜像 | 说明 |
 |------|------|
 | `ghcr.io/teddyxiong79/site-health-monitor:latest` | 最新稳定版 |
-| `ghcr.io/teddyxiong79/site-health-monitor:v1.6.1` | 指定版本 |
+| `ghcr.io/teddyxiong79/site-health-monitor:v1.6.2` | 指定版本 |
 
 支持平台：`linux/amd64`、`linux/arm64`。
 
@@ -228,6 +241,11 @@ docker buildx build --platform=linux/amd64,linux/arm64 \
 
 ## 📝 版本历史
 
+- **v1.6.2** — Bugfix：认证响应JSON化 + Token同步 + 延迟分类修正
+  - 🐛 所有 401 认证失败响应从纯文本改为 JSON 格式（handlers.go 8 处），外部 API 调用方不再因解析崩溃
+  - 🐛 Dashboard 修改密钥后同步更新隐藏的 raw-token 字段，避免后续操作仍用旧 Token 导致 401
+  - 🐛 `categorizeDelay` 负延迟值（≤0）正确归类为 `fault`，不再落入 `normal`
+  - 📦 默认刷新间隔从 120 秒调整为 **300 秒**
 - **v1.6.1** — 安全加固 + 全面测试 + 文档同步
   - 🔒 `/api/config` 和 `/api/test` 增加 Bearer Token 认证（首次配置无密钥时允许免认证）
   - 🔒 `maskToken()` 修复：短密钥（≤4字符）不再明文暴露，统一返回 `***`
@@ -253,7 +271,7 @@ docker buildx build --platform=linux/amd64,linux/arm64 \
   - 🐛 配置校验增强（端口范围 1-65535、刷新间隔 10-3600s）
   - 📦 配置持久化：Docker Volume 自动持久化，用户零操作
   - 📦 Dockerfile 修复：正确镜像版本、不打包密钥、添加 CA 证书
-  - 📦 默认刷新间隔改为 120 秒
+  - 📦 默认刷新间隔改为 **300 秒**
   - 📦 新增 .gitignore + config.json.example
 - **v1.5.2** — 新增代理节点切换、204 兼容、刷新间隔默认 90 秒
 - **v1.5.1** — 并发安全修复、Bug 优化、Docker 构建完善

@@ -1,7 +1,7 @@
 # 全球代理节点健康监控 - API 接口文档
 
-> **版本**: v1.6.0
-> **更新时间**: 2026-04-13
+> **版本**: v1.6.2
+> **更新时间**: 2026-04-19
 
 ---
 
@@ -101,15 +101,15 @@ curl http://localhost:9099/api/data
 
 **接口**: `POST /api/refresh`
 **认证**: 无需认证
-**用途**: 触发 OpenClash 对所有节点进行实时延迟测试（同步等待完成）
+**限流**: 10 秒 1 次，突发 3 次
+**用途**: 触发 OpenClash 对 `🔰国外流量` 代理组的所有节点进行实时延迟测试（同步等待完成）
 
-**请求参数**: 无（使用配置中的数据源地址、端口、密钥和组名）
+**请求参数**: 无（使用配置中的数据源地址、端口、密钥；组名硬编码为 `🔰国外流量`）
 
 **配置依赖**:
-- `api_address` - 数据源地址
-- `api_source_port` - 数据源端口
-- `api_secret` - 数据源密钥
-- `group_name` - OpenClash 中的代理组名称（如 `🔰国外流量`）
+- `api_address` - OpenClash 数据源地址
+- `api_source_port` - OpenClash 数据源端口
+- `api_secret` - OpenClash 访问密钥
 
 **响应示例**:
 ```json
@@ -179,7 +179,7 @@ curl -X POST http://localhost:9099/api/test \
 
 **接口**: `POST /api/config`
 **认证**: Bearer Token（首次配置无密钥时允许无认证）
-**用途**: 保存数据源配置（修改后需要重启刷新才能生效）
+**用途**: 保存数据源配置，保存后立即生效（缓存会自动失效）
 
 **请求体**:
 ```json
@@ -187,10 +187,11 @@ curl -X POST http://localhost:9099/api/test \
   "api_address": "192.168.66.251",
   "api_source_port": "9090",
   "api_secret": "VMware1!",
-  "refresh_seconds": 30,
-  "group_name": "🔰国外流量"
+  "refresh_seconds": 300
 }
 ```
+
+> 💡 `api_secret` 留空时保留原密钥不变。
 
 **响应示例**:
 ```json
@@ -203,8 +204,9 @@ curl -X POST http://localhost:9099/api/test \
 **curl 示例**:
 ```bash
 curl -X POST http://localhost:9099/api/config \
+  -H "Authorization: Bearer VMware1!" \
   -H "Content-Type: application/json" \
-  -d '{"api_address":"192.168.66.251","api_source_port":"9090","api_secret":"VMware1!","refresh_seconds":30,"group_name":"🔰国外流量"}'
+  -d '{"api_address":"192.168.66.251","api_source_port":"9090","api_secret":"VMware1!","refresh_seconds":300}'
 ```
 
 ---
@@ -235,7 +237,7 @@ curl -X POST http://localhost:9099/api/config \
 | `fast` | int | 高速节点 (1-150ms) |
 | `normal` | int | 正常节点 (151-240ms) |
 | `high_latency` | int | 低速节点 (241-500ms) |
-| `fault` | int | 故障节点 (>500ms 或 0ms) |
+| `fault` | int | 故障节点 (>500ms 或 ≤0ms，含负延迟) |
 | `healthy_count` | int | 健康节点数 (fast + normal) |
 | `healthy_pct` | int | 健康百分比 |
 
@@ -276,7 +278,7 @@ curl -H "Authorization: Bearer VMware1!" http://localhost:9099/api/summary
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `name` | string | 节点名称（已格式化，含 emoji 标识） |
-| `delay` | int | 延迟值 (ms)，0 表示故障 |
+| `delay` | int | 延迟值 (ms)；≤0 或 >500 归为故障 |
 | `category` | string | 分类: `fast` / `normal` / `high_latency` / `fault` |
 | `region` | string | 地区: `中国香港` / `新加坡` / `中国台湾` / `日本` / `美国` / `其他地区` |
 
@@ -461,6 +463,46 @@ curl -H "Authorization: Bearer VMware1!" \
 
 ---
 
+### 12. 切换代理节点
+
+**接口**: `POST /api/switch`
+**认证**: Bearer Token（首次配置无密钥时允许无认证）
+**限流**: 10 秒 1 次，突发 3 次
+**用途**: 将 `🔰国外流量` 代理组的当前选中节点切换为指定节点
+
+**请求体**:
+```json
+{
+  "node_name": "🇭🇰 V410U-1X-HK-NF"
+}
+```
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "message": "已将 🔰国外流量 切换至 🇭🇰 V410U-1X-HK-NF"
+}
+```
+
+**失败响应**:
+```json
+{
+  "success": false,
+  "message": "分组或节点不存在，请检查名称是否正确"
+}
+```
+
+**curl 示例**:
+```bash
+curl -X POST http://localhost:9099/api/switch \
+  -H "Authorization: Bearer VMware1!" \
+  -H "Content-Type: application/json" \
+  -d '{"node_name":"🇭🇰 V410U-1X-HK-NF"}'
+```
+
+---
+
 ## Python 调用示例
 
 ```python
@@ -529,13 +571,12 @@ test = api_post_no_auth("/api/test", {
 })
 print(test.get("message"))
 
-# 5. 保存配置
+# 5. 保存配置（需认证：当前配置已有密钥时）
 config = api_post_no_auth("/api/config", {
     "api_address": "192.168.66.251",
     "api_source_port": "9090",
     "api_secret": "VMware1!",
-    "refresh_seconds": 30,
-    "group_name": "🔰国外流量"
+    "refresh_seconds": 300
 })
 print(config.get("message"))
 
@@ -569,9 +610,14 @@ print(f"节点: {node['name']}, 延迟: {node['delay']}ms")
 
 ## 错误响应
 
+所有错误响应均为 JSON 格式（v1.6.2 起，外部 API 不再返回纯文本）。
+
 **未授权 (401)**:
-```
-Unauthorized
+```json
+{
+  "success": false,
+  "message": "认证失败：缺少或无效的 Bearer Token"
+}
 ```
 
 **请求错误 (400)**:
@@ -582,7 +628,14 @@ Unauthorized
 }
 ```
 
-**刷新失败**:
+**限流 (429)**:
+```
+Too Many Requests
+```
+
+> ⚠️ 目前限流中间件返回的仍是纯文本 `Too Many Requests`（gorilla/mux 的 `http.Error` 默认行为）。如果你的客户端对此敏感，请先做状态码判断再尝试 JSON 解析。
+
+**上游服务错误 (503)**:
 ```json
 {
   "success": false,
@@ -599,7 +652,7 @@ Unauthorized
 | `fast` | 1-150ms | 高速节点 |
 | `normal` | 151-240ms | 正常节点 |
 | `high_latency` | 241-500ms | 低速节点 |
-| `fault` | >500ms 或 0ms | 故障节点 |
+| `fault` | >500ms 或 ≤0ms | 故障节点（含负延迟） |
 
 ---
 
@@ -620,25 +673,27 @@ Unauthorized
 
 ### 配置文件: `config.json`
 
+容器环境下持久化到 `/data/config.json`（Docker Volume），本地运行时存放于程序当前目录。
+
 ```json
 {
   "port": "9099",
   "api_address": "192.168.66.251",
   "api_source_port": "9090",
   "api_secret": "VMware1!",
-  "refresh_seconds": 30,
-  "group_name": "🔰国外流量"
+  "refresh_seconds": 300
 }
 ```
 
-| 字段 | 说明 | 默认值 |
-|------|------|--------|
-| `port` | 服务端口 | 9099 |
-| `api_address` | OpenClash 数据源地址 | - |
-| `api_source_port` | OpenClash 数据源端口 | 9090 |
-| `api_secret` | OpenClash 访问密钥 | - |
-| `refresh_seconds` | 页面自动刷新间隔（秒） | 30 |
-| `group_name` | OpenClash 代理组名称（用于触发延迟测试） | 🔰国外流量 |
+| 字段 | 说明 | 默认值 | 校验 |
+|------|------|--------|------|
+| `port` | 服务监听端口（不可通过 API 修改，只能改配置文件） | `9099` | - |
+| `api_address` | OpenClash 数据源地址 | - | 非空、不允许 URL scheme 或路径、不允许回环地址 |
+| `api_source_port` | OpenClash 数据源端口 | `9090` | 1-65535 |
+| `api_secret` | OpenClash 访问密钥 | - | 允许空（兼容无密钥部署，但此时外部 API 不可用） |
+| `refresh_seconds` | 页面自动刷新间隔（秒） | `300` | 10-3600 |
+
+> 📝 **代理组名称**：硬编码为 `🔰国外流量`（见 `fetcher.go`），暂不支持配置化。
 
 ---
 

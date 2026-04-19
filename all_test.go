@@ -183,6 +183,51 @@ func TestGroupByRegion(t *testing.T) {
 	}
 }
 
+// TestGroupByRegion_NegativeLatencySortedLast 验证负延迟故障节点按 Category 排序，不会被当成"最快"
+// 修复 Bug#7：之前按 Delay 数值比较时，-1 < 1 会让负延迟节点排到最前面
+func TestGroupByRegion_NegativeLatencySortedLast(t *testing.T) {
+	nodes := []Node{
+		{Name: "HK-fault-negative", Delay: -1, Category: "fault", Region: "中国香港"},
+		{Name: "HK-fast", Delay: 100, Category: "fast", Region: "中国香港"},
+		{Name: "HK-fault-zero", Delay: 0, Category: "fault", Region: "中国香港"},
+		{Name: "HK-normal", Delay: 200, Category: "normal", Region: "中国香港"},
+	}
+
+	regions := GroupByRegion(nodes)
+	if len(regions) != 1 {
+		t.Fatalf("regions count = %d, want 1", len(regions))
+	}
+
+	hkNodes := regions[0].Nodes
+	// 预期顺序：fast(100) → normal(200) → fault(-1 或 0，顺序不保证)
+	if hkNodes[0].Category != "fast" {
+		t.Errorf("first node category = %q, want fast (got node %q)", hkNodes[0].Category, hkNodes[0].Name)
+	}
+	if hkNodes[1].Category != "normal" {
+		t.Errorf("second node category = %q, want normal (got node %q)", hkNodes[1].Category, hkNodes[1].Name)
+	}
+	// 最后两个都应该是 fault
+	if hkNodes[2].Category != "fault" || hkNodes[3].Category != "fault" {
+		t.Errorf("last two nodes should be fault, got %q and %q", hkNodes[2].Category, hkNodes[3].Category)
+	}
+}
+
+// TestCategoryPriority 验证排序优先级
+func TestCategoryPriority(t *testing.T) {
+	if categoryPriority("fast") >= categoryPriority("normal") {
+		t.Error("fast should have lower priority than normal")
+	}
+	if categoryPriority("normal") >= categoryPriority("high_latency") {
+		t.Error("normal should have lower priority than high_latency")
+	}
+	if categoryPriority("high_latency") >= categoryPriority("fault") {
+		t.Error("high_latency should have lower priority than fault")
+	}
+	if categoryPriority("unknown") < categoryPriority("fault") {
+		t.Error("unknown category should have the lowest priority")
+	}
+}
+
 func TestHyphenReplacer(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -992,16 +1037,18 @@ func TestFetchNodesCached_UsesCacheWithinTTL(t *testing.T) {
 	originalCfg := GetConfig()
 	defer SetConfig(originalCfg)
 
-	// 预填充缓存
+	cfg := Config{APIAddress: "192.168.1.1", APISourcePort: "9090"}
+
+	// 预填充缓存（cacheKey 必须与请求 cfg 匹配）
 	testNodes := []OpenClashNode{
 		{NodeName: "cached-node", Latency: 100},
 	}
 	globalCache.mu.Lock()
 	globalCache.nodes = testNodes
 	globalCache.lastFetch = time.Now()
+	globalCache.cacheKey = cacheKeyOf(cfg)
 	globalCache.mu.Unlock()
 
-	cfg := Config{APIAddress: "192.168.1.1", APISourcePort: "9090"}
 	nodes, err := FetchNodesCached(cfg)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -1012,6 +1059,29 @@ func TestFetchNodesCached_UsesCacheWithinTTL(t *testing.T) {
 
 	// 清理
 	InvalidateCache()
+}
+
+// TestFetchNodesCached_DifferentCfgBypassesCache 验证 Bug#6：切换数据源不会返回旧缓存
+func TestFetchNodesCached_DifferentCfgBypassesCache(t *testing.T) {
+	defer InvalidateCache()
+
+	// 预填充 cfg-A 的缓存
+	cfgA := Config{APIAddress: "192.168.1.1", APISourcePort: "9090"}
+	globalCache.mu.Lock()
+	globalCache.nodes = []OpenClashNode{{NodeName: "A-node", Latency: 100}}
+	globalCache.lastFetch = time.Now()
+	globalCache.cacheKey = cacheKeyOf(cfgA)
+	globalCache.mu.Unlock()
+
+	// 用 cfg-B 请求：应该不命中缓存（会尝试真实请求导致失败，这里验证的是"不返回 A-node"）
+	cfgB := Config{APIAddress: "10.0.0.1", APISourcePort: "9091"}
+	nodes, _ := FetchNodesCached(cfgB)
+	// 无论请求是否失败，都不应该返回 A 数据源的缓存节点
+	for _, n := range nodes {
+		if n.NodeName == "A-node" {
+			t.Errorf("switching cfg should not return old cache, but got node %q", n.NodeName)
+		}
+	}
 }
 
 // =============================================================================

@@ -69,22 +69,12 @@ func (i *ipLimiter) Stop() {
 }
 
 func (i *ipLimiter) getLimiter(ip string) *rate.Limiter {
-	// 先用读锁快速检查
-	i.mu.RLock()
-	if existingLim, exists := i.ips[ip]; exists {
-		i.mu.RUnlock()
-		// 更新 lastSeen 需要写锁
-		i.mu.Lock()
-		i.lastSeen[ip] = time.Now()
-		i.mu.Unlock()
-		return existingLim
-	}
-	i.mu.RUnlock()
-
-	// 升级为写锁创建新 limiter
+	// 直接使用写锁：原"读锁→释放→写锁"升级方式会在两锁之间留下窗口，
+	// 清理 goroutine 可能正好删除该 IP 条目，导致给已删除的 IP 更新 lastSeen 产生幽灵条目。
+	// 单次写锁更简单且避免状态不一致。
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	// 双检锁：可能已被其他 goroutine 创建
+
 	if existingLim, exists := i.ips[ip]; exists {
 		i.lastSeen[ip] = time.Now()
 		return existingLim

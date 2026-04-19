@@ -90,6 +90,22 @@ func categorizeDelay(latency int) string {
 	return "high_latency"
 }
 
+// categoryPriority 返回健康等级的排序优先级（数字越小越健康）
+func categoryPriority(category string) int {
+	switch category {
+	case "fast":
+		return 0
+	case "normal":
+		return 1
+	case "high_latency":
+		return 2
+	case "fault":
+		return 3
+	default:
+		return 4
+	}
+}
+
 func categorizeRegion(name string) string {
 	for _, cfg := range RegionConfigs {
 		for _, pattern := range cfg.Patterns {
@@ -121,16 +137,17 @@ func GroupByRegion(nodes []Node) []Region {
 
 	for _, name := range regionNames {
 		if nodeList, ok := regionMap[name]; ok {
-			// 按延迟排序：0ms（故障）排最后，其他按延迟从低到高
+			// 排序规则：先按健康等级（fast < normal < high_latency < fault），再按延迟升序
+			// 修复：不再用 Delay==0 作为故障标记（负延迟和 0 都是故障，但大于 240 的高延迟也是问题）
 			sort.Slice(nodeList, func(i, j int) bool {
-				if nodeList[i].Delay == 0 && nodeList[j].Delay == 0 {
-					return false // 两个都是0，保持原顺序
+				pi := categoryPriority(nodeList[i].Category)
+				pj := categoryPriority(nodeList[j].Category)
+				if pi != pj {
+					return pi < pj
 				}
-				if nodeList[i].Delay == 0 {
-					return false // i是0，排在后面
-				}
-				if nodeList[j].Delay == 0 {
-					return true // j是0，i排在前面
+				// 同一健康等级内：故障节点延迟可能为负/0，不具备比较意义，保持稳定顺序
+				if nodeList[i].Category == "fault" {
+					return false
 				}
 				return nodeList[i].Delay < nodeList[j].Delay
 			})

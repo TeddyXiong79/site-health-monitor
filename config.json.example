@@ -3,5 +3,5 @@
   "api_secret": "",
   "api_source_port": "9090",
   "port": "9099",
-  "refresh_seconds": 120
+  "refresh_seconds": 300
 }

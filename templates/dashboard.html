@@ -949,9 +949,15 @@ function fetchDataAndUpdate() {
             r.textContent = '切换中...';
             r.className = 'switch-msg';
             r.style.display = 'inline-block';
+            // 自动携带 Bearer Token（与 saveConfig/testConn 一致）
+            var switchHeaders = {'Content-Type': 'application/json'};
+            var switchRawToken = document.getElementById('raw-token');
+            if (switchRawToken && switchRawToken.value) {
+                switchHeaders['Authorization'] = 'Bearer ' + switchRawToken.value;
+            }
             fetch('/api/switch', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: switchHeaders,
                 body: JSON.stringify({node_name: nodeName})
             }).then(function(x) { return x.json(); }).then(function(d) {
                 if (d.success) {

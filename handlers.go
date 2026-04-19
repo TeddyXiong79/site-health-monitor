@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 
 var dashboardTemplate *template.Template
 
-const appVersion = "v1.6.1"
+const appVersion = "v1.6.2"
 
 func init() {
 	parseTemplates()
@@ -108,6 +109,19 @@ type APIResponse struct {
 	Success bool        `json:"success"`
 	Message string      `json:"message,omitempty"`
 	Data    interface{} `json:"data,omitempty"`
+}
+
+// writeJSONError 统一错误响应：设置 Content-Type + HTTP 状态码 + JSON 正文
+func writeJSONError(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(APIResponse{Success: false, Message: message})
+}
+
+// writeJSONSuccess 统一成功响应（200 OK）
+func writeJSONSuccess(w http.ResponseWriter, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: message})
 }
 
 func APIGetData(w http.ResponseWriter, r *http.Request) {
@@ -228,14 +242,12 @@ func APIHealth(w http.ResponseWriter, r *http.Request) {
 
 func APIRefresh(w http.ResponseWriter, r *http.Request) {
 	if err := TriggerDelayCheck(GetConfig()); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
+		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 
 	InvalidateCache()
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "延迟检查已触发，请稍后刷新获取最新数据"})
+	writeJSONSuccess(w, "延迟检查已触发，请稍后刷新获取最新数据")
 }
 
 func APIGetRegionNodes(w http.ResponseWriter, r *http.Request) {
@@ -363,17 +375,13 @@ func APIGetNodeDetail(w http.ResponseWriter, r *http.Request) {
 func APISaveConfig(w http.ResponseWriter, r *http.Request) {
 	// 已有密钥时要求 Bearer Token 认证（首次配置允许无认证）
 	if GetConfig().APISecret != "" && !validateToken(r) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
+		writeJSONError(w, http.StatusUnauthorized, "认证失败：缺少或无效的 Bearer Token")
 		return
 	}
 
 	var cfg Config
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "无效的请求"})
+		writeJSONError(w, http.StatusBadRequest, "无效的请求")
 		return
 	}
 
@@ -386,32 +394,46 @@ func APISaveConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := SaveConfig(cfg); err != nil {
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
+		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	InvalidateCache()
-	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: "配置已保存"})
+	writeJSONSuccess(w, "配置已保存")
 }
 
 func APITestConnection(w http.ResponseWriter, r *http.Request) {
 	// 已有密钥时要求 Bearer Token 认证（首次配置允许无认证）
 	if GetConfig().APISecret != "" && !validateToken(r) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
+		writeJSONError(w, http.StatusUnauthorized, "认证失败：缺少或无效的 Bearer Token")
 		return
 	}
 
 	var cfg Config
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "无效的请求")
+		return
+	}
+
+	// 基础校验：地址和端口必填
+	if cfg.APIAddress == "" {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "无效的请求"})
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "数据源地址不能为空"})
+		return
+	}
+	if cfg.APISourcePort == "" {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "数据源端口不能为空"})
+		return
+	}
+	if port, err := strconv.Atoi(cfg.APISourcePort); err != nil || port < 1 || port > 65535 {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "数据源端口必须是 1-65535 之间的数字"})
 		return
 	}
 
 	success, message := TestConnection(cfg)
+	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(APIResponse{Success: success, Message: message})
 }
 
@@ -430,26 +452,30 @@ func validateToken(r *http.Request) bool {
 
 // APISwitchProxy 设置 🔰国外流量 策略组的当前代理
 func APISwitchProxy(w http.ResponseWriter, r *http.Request) {
+	// 已有密钥时要求 Bearer Token 认证（与 /api/config、/api/test 对齐：写操作需要认证）
+	if GetConfig().APISecret != "" && !validateToken(r) {
+		writeJSONError(w, http.StatusUnauthorized, "认证失败：缺少或无效的 Bearer Token")
+		return
+	}
+
 	var req struct {
 		NodeName string `json:"node_name"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "无效的请求")
 		return
 	}
 	if req.NodeName == "" {
-		http.Error(w, "node_name is required", http.StatusBadRequest)
+		writeJSONError(w, http.StatusBadRequest, "节点名称不能为空")
 		return
 	}
 
 	if err := SwitchProxy(GetConfig(), req.NodeName); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: err.Error()})
+		writeJSONError(w, http.StatusServiceUnavailable, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(APIResponse{Success: true, Message: fmt.Sprintf("已将 🔰国外流量 切换至 %s", req.NodeName)})
+	writeJSONSuccess(w, fmt.Sprintf("已将 🔰国外流量 切换至 %s", req.NodeName))
 }
 
 // regionCodeToName 转换区域简码到完整名称
