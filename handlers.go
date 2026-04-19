@@ -85,6 +85,7 @@ func RenderDashboard(w http.ResponseWriter, r *http.Request) {
 		APIAddress:     cfg.APIAddress,
 		APISourcePort:  cfg.APISourcePort,
 		MaskedSecret:   maskToken(cfg.APISecret),
+		RawToken:       cfg.APISecret, // 前端同源请求自动携带 Bearer 认证
 		RefreshSeconds: cfg.RefreshSeconds,
 	}
 
@@ -145,7 +146,9 @@ func APIGetData(w http.ResponseWriter, r *http.Request) {
 
 func APIGetSummary(w http.ResponseWriter, r *http.Request) {
 	if !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 
@@ -166,7 +169,9 @@ func APIGetSummary(w http.ResponseWriter, r *http.Request) {
 
 func APIGetNodes(w http.ResponseWriter, r *http.Request) {
 	if !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 
@@ -189,7 +194,9 @@ func APIGetNodes(w http.ResponseWriter, r *http.Request) {
 
 func APIGetRegions(w http.ResponseWriter, r *http.Request) {
 	if !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 
@@ -233,7 +240,9 @@ func APIRefresh(w http.ResponseWriter, r *http.Request) {
 
 func APIGetRegionNodes(w http.ResponseWriter, r *http.Request) {
 	if !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 
@@ -275,7 +284,9 @@ func APIGetRegionNodes(w http.ResponseWriter, r *http.Request) {
 
 func APIGetNodeFilter(w http.ResponseWriter, r *http.Request) {
 	if !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 
@@ -312,7 +323,9 @@ func APIGetNodeFilter(w http.ResponseWriter, r *http.Request) {
 
 func APIGetNodeDetail(w http.ResponseWriter, r *http.Request) {
 	if !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 
@@ -350,7 +363,9 @@ func APIGetNodeDetail(w http.ResponseWriter, r *http.Request) {
 func APISaveConfig(w http.ResponseWriter, r *http.Request) {
 	// 已有密钥时要求 Bearer Token 认证（首次配置允许无认证）
 	if GetConfig().APISecret != "" && !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 
@@ -382,7 +397,9 @@ func APISaveConfig(w http.ResponseWriter, r *http.Request) {
 func APITestConnection(w http.ResponseWriter, r *http.Request) {
 	// 已有密钥时要求 Bearer Token 认证（首次配置允许无认证）
 	if GetConfig().APISecret != "" && !validateToken(r) {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(APIResponse{Success: false, Message: "认证失败：缺少或无效的 Bearer Token"})
 		return
 	}
 

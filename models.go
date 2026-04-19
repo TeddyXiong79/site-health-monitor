@@ -54,6 +54,7 @@ type SafeConfig struct {
     APIAddress     string
     APISourcePort  string
     MaskedSecret   string // 脱敏后的密钥，如 "VM***1!"
+    RawToken       string // 原始完整 Token，供前端同源请求自动携带 Bearer 认证（服务端渲染注入）
     RefreshSeconds int
 }
 

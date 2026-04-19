@@ -26,7 +26,7 @@ func TestCategorizeDelay(t *testing.T) {
 		{"zero latency", 0, "fault"},
 		{"501ms", 501, "fault"},
 		{"1000ms", 1000, "fault"},
-		{"negative -1 falls into normal (<=240)", -1, "normal"}, // -1: !=0, !>500, <1 (skip fast), <=240 → normal
+		{"negative -1 falls into fault (<=0)", -1, "fault"}, // 负延迟表示节点异常，应归类为故障
 
 		// fast: 1-150
 		{"1ms", 1, "fast"},

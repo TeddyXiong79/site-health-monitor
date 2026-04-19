@@ -78,7 +78,7 @@ func ProcessNodes(rawNodes []OpenClashNode) ([]Node, Stats) {
 }
 
 func categorizeDelay(latency int) string {
-	if latency == 0 || latency > 500 {
+	if latency <= 0 || latency > 500 {
 		return "fault"
 	}
 	if latency >= 1 && latency <= 150 {

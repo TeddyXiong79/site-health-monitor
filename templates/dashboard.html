@@ -509,6 +509,8 @@
         <div class="token-display" id="token-display">
             <span class="token-label">对外API调用密钥：</span>
             <span class="token-value" id="token-value">{{.Data.SafeConfig.MaskedSecret}}</span>
+            <!-- 隐藏原始Token，供同源请求自动携带 Bearer 认证 -->
+            <input type="hidden" id="raw-token" value="{{escapeAttr .Data.SafeConfig.RawToken}}">
         </div>
 
         <div class="config">
@@ -863,15 +865,25 @@ function fetchDataAndUpdate() {
                 api_secret: document.getElementById('apiSecret').value,
                 refresh_seconds: +document.getElementById('refreshSeconds').value
             };
+            // 自动携带 Bearer Token（同源请求，Token 由服务端渲染注入隐藏字段）
+            var headers = {'Content-Type': 'application/json'};
+            var rawToken = document.getElementById('raw-token');
+            if (rawToken && rawToken.value) {
+                headers['Authorization'] = 'Bearer ' + rawToken.value;
+            }
             fetch('/api/config', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: headers,
                 body: JSON.stringify(payload)
             }).then(function(x) { return x.json(); }).then(function(d) {
                 if (d.success) {
-                    // 如果输入了新密钥，同步更新脱敏显示
+                    // 如果输入了新密钥，同步更新脱敏显示和隐藏的 raw-token
                     if (payload.api_secret) {
                         var tokenEl = document.getElementById('token-value');
+                        var rawTokenEl = document.getElementById('raw-token');
+                        if (rawTokenEl) {
+                            rawTokenEl.value = payload.api_secret;
+                        }
                         if (tokenEl && payload.api_secret.length > 4) {
                             tokenEl.textContent = payload.api_secret.substring(0, 2) + '***' + payload.api_secret.substring(payload.api_secret.length - 2);
                         }
@@ -904,9 +916,15 @@ function fetchDataAndUpdate() {
             r.className = '';
             r.style.display = 'block';
             var secretInput = document.getElementById('apiSecret').value;
+            // 自动携带 Bearer Token（同源请求，Token 由服务端渲染注入隐藏字段）
+            var headers = {'Content-Type': 'application/json'};
+            var rawToken = document.getElementById('raw-token');
+            if (rawToken && rawToken.value) {
+                headers['Authorization'] = 'Bearer ' + rawToken.value;
+            }
             fetch('/api/test', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: headers,
                 body: JSON.stringify({
                     api_address: document.getElementById('apiAddress').value,
                     api_source_port: document.getElementById('apiSourcePort').value,
